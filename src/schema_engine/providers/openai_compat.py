@@ -1,4 +1,4 @@
-"""OpenAI-compatible chat completions (OpenAI, Groq, OpenRouter, Gemini).
+"""OpenAI-compatible chat completions (OpenAI, Groq).
 
 Requests go straight from this machine to the provider with the user's own
 bearer token; there is no proxy in between.
