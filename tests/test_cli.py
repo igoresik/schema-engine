@@ -1,11 +1,14 @@
 import json
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from schema_engine import __version__
-from schema_engine.cli import app
+from schema_engine.cli import _default_output, app
+from schema_engine.io import load_dataset
 from schema_engine.providers import AuthenticationError, FakeProvider, RateLimits
+from schema_engine.samples import write_samples
 
 runner = CliRunner()
 
@@ -87,3 +90,121 @@ def test_test_connection_missing_key(clean_env):
     result = runner.invoke(app, ["test-connection", "--provider", "openai"])
     assert result.exit_code == 2
     assert "No API key for 'openai'" in result.stderr
+
+
+GOOD = """```python
+import pandas as pd
+
+
+def transform(df):
+    out = df.iloc[:, [0, 2]].copy()
+    out.columns = ["order_id", "email"]
+    out["order_id"] = out["order_id"].str.strip()
+    return out
+```"""
+
+
+@pytest.fixture
+def orders(tmp_path):
+    write_samples(tmp_path, rows=12)
+    return tmp_path / "dirty_orders.csv"
+
+
+def as_text(df):
+    return df.fillna("").astype(str).values.tolist()
+
+
+def test_run_then_apply_without_the_model(clean_env, monkeypatch, orders):
+    use_fake(monkeypatch, FakeProvider([GOOD]))
+    result = runner.invoke(app, ["run", str(orders), "keep the order id and email"])
+    assert result.exit_code == 0, result.output
+
+    out = orders.with_name("dirty_orders_clean.csv")
+    script = orders.with_name("dirty_orders_transform.py")
+    cleaned = load_dataset(out)
+    assert list(cleaned.columns) == ["order_id", "email"]
+    assert len(cleaned) == len(load_dataset(orders))
+    assert f"{len(cleaned)} rows -> {out}" in result.stdout
+    assert f"transform -> {script}" in result.stdout
+    assert "attempt 1: ok (" in result.stderr
+    assert "tokens in total" in result.stderr
+
+    text = script.read_text(encoding="utf-8")
+    assert text.startswith("# schema-engine transform for dirty_orders.csv, made ")
+    assert "#   keep the order id and email\n" in text
+    assert "# Model: ollama/llama3.1, 1 attempt(s), " in text
+    assert "schema-engine apply dirty_orders_transform.py dirty_orders.csv" in text
+    assert text.endswith("    return out\n")
+
+    again = orders.with_name("again.xlsx")
+    result = runner.invoke(app, ["apply", str(script), str(orders), "-o", str(again)])
+    assert result.exit_code == 0, result.output
+    assert as_text(load_dataset(again)) == as_text(cleaned)
+
+
+def test_run_retries_and_custom_paths(clean_env, monkeypatch, orders):
+    broken = "```python\ndef transform(df):\n    return df[['nope']]\n```"
+    use_fake(monkeypatch, FakeProvider([broken, GOOD]))
+    out = orders.parent / "out" / "clean.xlsx"
+    save = orders.parent / "scripts" / "orders.py"
+    args = ["run", str(orders), "x", "-o", str(out), "--save", str(save), "-p", "none"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert "attempt 1: failed, KeyError" in result.stderr
+    assert "attempt 2: ok" in result.stderr
+    assert out.exists()
+    assert "2 attempt(s)" in save.read_text(encoding="utf-8")
+
+
+def test_run_gives_up(clean_env, monkeypatch, orders):
+    use_fake(monkeypatch, FakeProvider(["```python\ndef clean(df):\n    return df\n```"]))
+    result = runner.invoke(app, ["run", str(orders), "x", "--attempts", "1"])
+    assert result.exit_code == 1
+    assert "No working transform after 1 attempts. Last error:" in result.stderr
+    assert "no top-level 'def transform(df)' found" in result.stderr
+    assert not orders.with_name("dirty_orders_clean.csv").exists()
+
+
+def test_run_provider_error(clean_env, monkeypatch, orders):
+    use_fake(monkeypatch, FakeProvider([AuthenticationError("HTTP 401: bad key")]))
+    result = runner.invoke(app, ["run", str(orders), "x"])
+    assert result.exit_code == 1
+    assert "ollama request failed: HTTP 401: bad key" in result.stderr
+
+
+def test_run_checks_before_spending_tokens(clean_env, monkeypatch, orders):
+    fake = FakeProvider([GOOD])
+    use_fake(monkeypatch, fake)
+    result = runner.invoke(app, ["run", str(orders), "x", "-o", "out.json"])
+    assert result.exit_code == 2
+    assert "Can't write '.json' files" in result.stderr
+    result = runner.invoke(app, ["run", str(orders), "x", "--provider", "nope"])
+    assert result.exit_code == 2
+    assert "Unknown provider 'nope'" in result.stderr
+    assert fake.calls == []
+
+
+def test_apply_reports_errors_and_excel_output(clean_env, orders, tmp_path):
+    bad = tmp_path / "bad.py"
+    bad.write_text("import os\ndef transform(df):\n    return df\n", encoding="utf-8")
+    result = runner.invoke(app, ["apply", str(bad), str(orders)])
+    assert result.exit_code == 1
+    assert "import of 'os' is not allowed" in result.stderr
+
+    good = tmp_path / "good.py"
+    good.write_text("def transform(df):\n    return df.iloc[:, :2]\n", encoding="utf-8")
+    xlsx = orders.with_suffix(".xlsx")
+    result = runner.invoke(app, ["apply", str(good), str(xlsx)])
+    assert result.exit_code == 0, result.output
+    assert orders.with_name("dirty_orders_clean.xlsx").exists()
+
+    result = runner.invoke(app, ["apply", str(good), str(orders), "-o", "x.parquet"])
+    assert result.exit_code == 2
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("a.csv", "a_clean.csv"), ("a.TSV", "a_clean.tsv"), ("a.xls", "a_clean.xlsx")],
+)
+def test_default_output(name, expected):
+    assert _default_output(Path(name)) == Path(expected)
