@@ -9,10 +9,12 @@ Agreed 2026-11-03. Each step lands as its own pull request.
    OpenAI-compatible client (OpenAI, Groq) over plain `httpx`. Config from `.env` and
    `~/.config/schema-engine/config.json`. `test-connection` sends a one-token request.
    Tests use a fake provider so CI never needs keys.
-3. **Code generation, sandbox, self-healing** (this step). Constrained prompt and code extraction;
+3. **Code generation, sandbox, self-healing** (done, PR #3). Constrained prompt and code extraction;
    generated `transform(df)` runs in a subprocess with a timeout, import allowlist and no
    network. Tracebacks go back to the model for up to N retries. Token usage logged per run.
-4. **Docs and polish.** Architecture diagram, demo run on Ollama, coverage badge.
+4. **Docs and polish** (this step). Architecture diagram and module map, version 0.2.0.
+   Still open: a demo run on a real model (Ollama or a key) and a coverage badge, which
+   needs the repo to be public or a coverage service.
 
 Later: export presets (Shopify product CSV, SQLite `CREATE TABLE` DDL), optional FastAPI wrapper.
 
