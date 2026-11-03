@@ -34,3 +34,4 @@ jobs:
           schema-engine samples samples --rows 20
           schema-engine profile samples/dirty_orders.csv --compact > /dev/null
           schema-engine profile samples/dirty_orders.xlsx --privacy-mode none --compact > /dev/null
+          schema-engine apply examples/clean_orders.py samples/dirty_orders.csv -o samples/clean.csv

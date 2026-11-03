@@ -3,6 +3,7 @@ import json
 import pytest
 
 from schema_engine.config import (
+    PRESETS,
     ConfigError,
     Settings,
     config_path,
@@ -152,3 +153,9 @@ def test_config_path_honours_xdg(tmp_path):
     path = config_path({"XDG_CONFIG_HOME": str(tmp_path)})
     assert path == tmp_path / "schema-engine" / "config.json"
     assert config_path({}).parts[-3:] == (".config", "schema-engine", "config.json")
+
+
+def test_temperature_per_provider():
+    assert PRESETS["ollama"].temperature == 0.0
+    assert PRESETS["groq"].temperature == 0.0
+    assert PRESETS["openai"].temperature is None

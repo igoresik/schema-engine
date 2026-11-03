@@ -18,7 +18,7 @@ opt in.
  └──────────────────────────────────────────────────────┘
 ```
 
-Licensed MIT. Status: step 2 of 4 (provider layer, bring your own key). See [docs/PLAN.md](docs/PLAN.md).
+Licensed MIT. Status: step 3 of 4 (code generation, sandbox, self-healing). See [docs/PLAN.md](docs/PLAN.md).
 
 ## Quick start
 
@@ -29,11 +29,64 @@ pip install -e ".[dev]"
 schema-engine samples samples/                       # synthetic dirty CSV + XLSX
 schema-engine profile samples/dirty_orders.csv       # what the LLM would see (masked)
 schema-engine profile samples/dirty_orders.csv -p none
+schema-engine apply examples/clean_orders.py samples/dirty_orders.csv -o clean.csv
 schema-engine test-connection                        # check your LLM provider
+schema-engine run samples/dirty_orders.csv "Tidy names and emails, parse dates and prices"
 ```
 
 `profile` prints the exact JSON payload that would be sent to the model, plus an
 estimated token count on stderr.
+
+## Generate and run a transform
+
+```bash
+schema-engine run samples/dirty_orders.csv "Tidy names and emails, parse dates and prices, drop duplicates"
+```
+
+`run` profiles the file, sends the profile and your instruction to the model, and runs
+the code it writes in the sandbox against the full data. If the code fails, the error
+goes back to the model for a fix, up to `--attempts` tries (default 3). Each try's
+token count is printed as it happens, plus a total at the end.
+
+When a try works, `run` writes two files next to the input:
+
+- `NAME_clean.csv` (or `.tsv` / `.xlsx`, matching the input): the cleaned data. Change
+  it with `-o`.
+- `NAME_transform.py`: the generated code, with a header saying which model wrote it and
+  how many tokens it took. Change it with `--save`.
+
+The saved transform is plain Python. Read it, edit it, commit it, and run it again on
+next month's export without the model:
+
+```bash
+schema-engine apply samples/dirty_orders_transform.py next_month.csv -o next_month_clean.csv
+```
+
+`apply` costs no tokens. [examples/clean_orders.py](examples/clean_orders.py) is a
+hand-written transform for the sample data, so you can try `apply` before setting up a
+provider.
+
+## Sandbox
+
+Generated code is never run in the engine's own process.
+
+1. **Static check before anything runs.** Imports must be on an allowlist (pandas,
+   numpy, re, datetime, math and a few more). File and network I/O (`open`,
+   `read_*`, `to_csv` and friends), `eval`, `exec`, `query`, `getattr` and dunder
+   attributes are rejected.
+2. **A separate Python process** with a time limit (`--timeout`, default 30 s). Its
+   environment holds no API keys. While the transform runs, file and network access are
+   blocked and imports from the generated code are checked again.
+3. **Output checks.** The transform must return a DataFrame with unique, non-empty
+   column names. Results come back as JSON, never as a pickle.
+
+This stops careless or buggy code. It is not a hard security boundary like a container
+or VM, so don't point it at code you would never trust.
+
+Error messages sent back to the model have cell values replaced (masked shapes, or
+`<value>` in `none` mode), so a failed try doesn't leak rows. Column names and strings
+the model wrote itself are kept. This is best effort and matches values as plain text.
+`raw` mode sends errors unchanged.
 
 ## Privacy modes
 
@@ -114,4 +167,13 @@ from schema_engine.providers import Message, create_provider
 
 llm = create_provider(load_settings(provider="ollama"))
 print(llm.complete([Message("user", "Say hi")]).text)
+
+from schema_engine import load_dataset
+from schema_engine.engine import compile_transform
+
+df = load_dataset("orders.xlsx")
+result = compile_transform(df, "Parse the order dates", llm, source="orders.xlsx")
+if result.ok:
+    print(result.code, result.usage.total_tokens)
+    result.output.to_csv("orders_clean.csv", index=False)
 ```

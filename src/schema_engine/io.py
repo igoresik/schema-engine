@@ -16,6 +16,7 @@ import pandas as pd
 
 CSV_SUFFIXES = {".csv", ".tsv", ".txt"}
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
+WRITE_SUFFIXES = {".csv", ".tsv", ".txt", ".xlsx"}
 ENCODINGS = ("utf-8-sig", "cp1252", "latin-1")
 
 
@@ -31,6 +32,19 @@ def load_dataset(path: str | Path, *, sheet: str | int = 0) -> pd.DataFrame:
     if suffix in EXCEL_SUFFIXES:
         return _load_excel(path, sheet)
     raise UnsupportedFormatError(f"Unsupported file type '{suffix}'. Use CSV or XLSX.")
+
+
+def save_dataset(df: pd.DataFrame, path: str | Path) -> None:
+    """Write ``df`` as CSV, TSV or XLSX, picked from the file suffix."""
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix not in WRITE_SUFFIXES:
+        raise UnsupportedFormatError(f"Can't write '{suffix}' files. Use .csv, .tsv or .xlsx.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if suffix == ".xlsx":
+        df.to_excel(path, index=False)
+    else:
+        df.to_csv(path, index=False, sep="	" if suffix == ".tsv" else ",")
 
 
 def _load_csv(path: Path) -> pd.DataFrame:
