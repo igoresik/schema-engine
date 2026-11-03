@@ -2,10 +2,10 @@
 
 Agreed 2026-11-03. Each step lands as its own pull request.
 
-1. **Skeleton and metadata extraction** (this step). Python 3.11+ package, typer CLI,
+1. **Skeleton and metadata extraction** (done, PR #1). Python 3.11+ package, typer CLI,
    pytest + ruff + GitHub Actions. CSV/XLSX loader, `DatasetProfile`, privacy tiers,
    synthetic dirty sample generator.
-2. **Provider layer (BYOK).** `LLMProvider` interface; Ollama and one
+2. **Provider layer (BYOK)** (this step). `LLMProvider` interface; Ollama and one
    OpenAI-compatible client (OpenAI, Groq) over plain `httpx`. Config from `.env` and
    `~/.config/schema-engine/config.json`. `test-connection` sends a one-token request.
    Tests use a fake provider so CI never needs keys.
