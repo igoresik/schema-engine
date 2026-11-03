@@ -58,9 +58,7 @@ def _locked_down() -> Iterator[None]:
     def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
         # Only imports made by the generated code are limited; pandas' own lazy
         # imports still work.
-        if (globals or {}).get("__name__") == GENERATED and name.split(".")[0] not in (
-            ALLOWED_IMPORTS
-        ):
+        if (globals or {}).get("__name__") == GENERATED and not _allowed_at_runtime(name):
             raise ImportError(f"import of '{name}' is not allowed")
         return real_import(name, globals, locals, fromlist, level)
 
@@ -77,6 +75,14 @@ def _locked_down() -> Iterator[None]:
         builtins.__import__, builtins.open = real_import, real_open
         for obj, name, value in saved:
             setattr(obj, name, value)
+
+
+def _allowed_at_runtime(name: str) -> bool:
+    top = name.split(".")[0]
+    # C code like datetime.strptime or str.encode imports private helpers
+    # (_strptime, encodings.*) on the caller's behalf. The static check already
+    # stops generated code from importing these itself.
+    return top in ALLOWED_IMPORTS or top.startswith("_") or top == "encodings"
 
 
 def _check_output(result: object) -> None:

@@ -205,6 +205,16 @@ def test_output_checks(tmp_path, body, message):
     assert error.endswith(message)
 
 
+def test_stdlib_helpers_that_import_lazily_still_work(tmp_path):
+    code = (
+        "from datetime import datetime\n"
+        "def transform(df):\n"
+        "    when = datetime.strptime('21.07.24', '%d.%m.%y')\n"
+        "    return df.assign(when=when, raw=len('café'.encode('cp1252')))\n"
+    )
+    assert run_in_process(tmp_path, code) == (0, None)
+
+
 def test_runner_success_writes_output(tmp_path):
     rc, error = run_in_process(tmp_path, "def transform(df):\n    return df.assign(b=1)\n")
     assert (rc, error) == (0, None)
