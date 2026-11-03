@@ -39,9 +39,7 @@ class ProviderPreset:
 
 PRESETS: dict[str, ProviderPreset] = {
     "ollama": ProviderPreset("ollama", "http://localhost:11434", "llama3.1", None),
-    "openai": ProviderPreset(
-        "openai", "https://api.openai.com/v1", "gpt-4o-mini", "OPENAI_API_KEY"
-    ),
+    "openai": ProviderPreset("openai", "https://api.openai.com/v1", "gpt-6-luna", "OPENAI_API_KEY"),
     "groq": ProviderPreset(
         "openai", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"
     ),
