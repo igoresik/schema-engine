@@ -8,17 +8,23 @@ full data. Prompt cost is O(1) in row count, and rows never leave your machine u
 opt in.
 
 ```
- ┌───────────────── data plane (local) ─────────────────┐      ┌── control plane ──┐
- │ CSV/XLSX ─► DataFrame ─► profile (+ privacy mode) ───┼─────►│ LLM writes        │
- │                │                                     │      │ transform(df)     │
- │                └──► sandboxed exec ◄─────────────────┼──────┤                   │
- │                         │  error? traceback ─────────┼─────►│ self-heal         │
- │                         ▼                            │      └───────────────────┘
- │                  clean DataFrame ─► export            │
- └──────────────────────────────────────────────────────┘
+ ┌─────────────────── your machine ───────────────────┐       ┌─ LLM provider ──┐
+ │ CSV/XLSX ─► DataFrame ─► profile (privacy mode) ───┼──────►│ writes          │
+ │    │                                               │       │ transform(df)   │
+ │    │            static check ◄─────────────────────┼───────┤                 │
+ │    │                 │                             │       │                 │
+ │    └─► sandbox process (full data) ─► error? ──────┼──────►│ fixes it        │
+ │                      │              (cell values   │       │ (up to N tries) │
+ │                      │               hidden)       │       └─────────────────┘
+ │                      ▼                             │
+ │      clean data + NAME_transform.py                │
+ │                      │                             │
+ │                      ▼                             │
+ │      apply on new files: no LLM, 0 tokens          │
+ └────────────────────────────────────────────────────┘
 ```
 
-Licensed MIT. Status: step 3 of 4 (code generation, sandbox, self-healing). See [docs/PLAN.md](docs/PLAN.md).
+Licensed MIT. Status: version 0.2.0, works end to end; not yet tried on a real model. See [docs/PLAN.md](docs/PLAN.md).
 
 ## Quick start
 
@@ -143,6 +149,22 @@ schema-engine test-connection --provider groq --model openai/gpt-oss-20b
 `test-connection` prints the resolved settings with the key masked, sends a one-token
 request and reports latency, tokens used and remaining rate limit. It exits with 1 when
 the request fails and 2 when the configuration is incomplete.
+
+## How it works
+
+| Module | Job |
+| --- | --- |
+| `io.py` | Loads CSV/XLSX without "fixing" anything (headers and text kept as they are); writes CSV, TSV or XLSX |
+| `profile.py`, `privacy.py` | Builds the column profile under the chosen privacy mode. This is all the model ever sees about the data |
+| `prompt.py` | The rules the model must follow, pulling the code out of its reply, and the repair message after a failure |
+| `providers/` | One interface, two clients: Ollama and OpenAI-compatible APIs. Retries rate limits and server errors |
+| `config.py` | Reads settings in a fixed order and keeps API keys out of logs |
+| `sandbox.py`, `_runner.py` | Static check, the separate process that runs the code, and the output checks |
+| `engine.py` | The loop: ask, run, send the error back, stop on success or after N tries |
+| `cli.py` | `profile`, `samples`, `test-connection`, `run`, `apply` |
+
+Cost stays flat as files grow: the prompt depends on the number of columns, never on the
+number of rows, and a saved transform can be reused for free with `apply`.
 
 ## Development
 
