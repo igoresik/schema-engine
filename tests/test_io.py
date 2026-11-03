@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from schema_engine.io import UnsupportedFormatError, load_dataset
+from schema_engine.io import UnsupportedFormatError, load_dataset, save_dataset
 from schema_engine.samples import write_samples
 
 
@@ -58,3 +58,19 @@ def test_empty_csv(tmp_path):
     path.write_text("")
     with pytest.raises(pd.errors.EmptyDataError):
         load_dataset(path)
+
+
+@pytest.mark.parametrize("name", ["out.csv", "out.tsv", "nested/out.xlsx"])
+def test_save_round_trip(tmp_path, name):
+    df = pd.DataFrame({"id": ["007", "008"], "city": ["Cork", None]})
+    path = tmp_path / name
+    save_dataset(df, path)
+    back = load_dataset(path)
+    assert list(back.columns) == ["id", "city"]
+    assert back.iloc[1, 0] == "008"
+    assert pd.isna(back.iloc[1, 1])
+
+
+def test_save_unsupported(tmp_path):
+    with pytest.raises(UnsupportedFormatError, match=r"'\.json'"):
+        save_dataset(pd.DataFrame({"a": [1]}), tmp_path / "out.json")
