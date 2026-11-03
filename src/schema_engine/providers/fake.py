@@ -24,7 +24,7 @@ class FakeProvider(LLMProvider):
         self.calls: list[list[Message]] = []
 
     def complete(
-        self, messages: list[Message], *, max_tokens: int = 1024, temperature: float = 0.0
+        self, messages: list[Message], *, max_tokens: int = 1024, temperature: float | None = None
     ) -> Completion:
         self.calls.append(list(messages))
         index = min(len(self.calls) - 1, len(self._replies) - 1)

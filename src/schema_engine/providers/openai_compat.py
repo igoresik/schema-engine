@@ -23,14 +23,16 @@ class OpenAICompatibleProvider(HTTPProvider):
         return {**super()._headers(), "Authorization": f"Bearer {self._api_key}"}
 
     def complete(
-        self, messages: list[Message], *, max_tokens: int = 1024, temperature: float = 0.0
+        self, messages: list[Message], *, max_tokens: int = 1024, temperature: float | None = None
     ) -> Completion:
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
-            "temperature": temperature,
             "max_completion_tokens": max_tokens,  # max_tokens is deprecated on both
         }
+        # Reasoning models (e.g. gpt-6-luna) can reject a non-default temperature.
+        if temperature is not None:
+            payload["temperature"] = temperature
         body, latency = self._post("/chat/completions", payload)
         try:
             text = body["choices"][0]["message"].get("content") or ""

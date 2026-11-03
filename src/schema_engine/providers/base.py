@@ -123,9 +123,12 @@ class LLMProvider(ABC):
         messages: list[Message],
         *,
         max_tokens: int = 1024,
-        temperature: float = 0.0,
+        temperature: float | None = None,
     ) -> Completion:
-        """Return the model's reply. Raises a ``ProviderError`` subclass on failure."""
+        """Return the model's reply. ``temperature=None`` keeps the provider default.
+
+        Raises a ``ProviderError`` subclass on failure.
+        """
 
     def health_check(self) -> HealthReport:
         """Preflight: one-token request to prove reachability, auth and model."""

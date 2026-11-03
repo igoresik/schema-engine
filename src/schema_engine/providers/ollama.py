@@ -7,13 +7,16 @@ from schema_engine.providers.base import Completion, HTTPProvider, Message, Prov
 
 class OllamaProvider(HTTPProvider):
     def complete(
-        self, messages: list[Message], *, max_tokens: int = 1024, temperature: float = 0.0
+        self, messages: list[Message], *, max_tokens: int = 1024, temperature: float | None = None
     ) -> Completion:
+        options: dict = {"num_predict": max_tokens}
+        if temperature is not None:
+            options["temperature"] = temperature
         payload = {
             "model": self.model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
             "stream": False,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": options,
         }
         body, latency = self._post("/api/chat", payload)
         try:
