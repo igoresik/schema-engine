@@ -22,9 +22,6 @@ from schema_engine.providers.fake import FakeProvider
 from schema_engine.providers.ollama import OllamaProvider
 from schema_engine.providers.openai_compat import OpenAICompatibleProvider
 
-# OpenAI's newer models reject `max_tokens`; the other compatible APIs expect it.
-_TOKEN_PARAM = {"openai": "max_completion_tokens"}
-
 
 def create_provider(settings: Settings, *, client: httpx.Client | None = None) -> LLMProvider:
     """Build the provider described by ``settings``."""
@@ -42,7 +39,6 @@ def create_provider(settings: Settings, *, client: httpx.Client | None = None) -
     assert key is not None  # require_key raises otherwise
     return OpenAICompatibleProvider(
         api_key=key,
-        token_param=_TOKEN_PARAM.get(settings.provider, "max_tokens"),
         **common,
     )
 

@@ -12,10 +12,9 @@ from schema_engine.providers.base import Completion, HTTPProvider, Message, Prov
 
 
 class OpenAICompatibleProvider(HTTPProvider):
-    def __init__(self, *, api_key: str, token_param: str = "max_tokens", **kwargs: Any) -> None:
+    def __init__(self, *, api_key: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._api_key = api_key
-        self._token_param = token_param
 
     def __repr__(self) -> str:  # never show the key
         return f"OpenAICompatibleProvider(name={self.name!r}, model={self.model!r})"
@@ -30,7 +29,7 @@ class OpenAICompatibleProvider(HTTPProvider):
             "model": self.model,
             "messages": [{"role": m.role, "content": m.content} for m in messages],
             "temperature": temperature,
-            self._token_param: max_tokens,
+            "max_completion_tokens": max_tokens,  # max_tokens is deprecated on both
         }
         body, latency = self._post("/chat/completions", payload)
         try:
