@@ -35,13 +35,16 @@ class ProviderPreset:
     base_url: str
     default_model: str
     key_env: str | None  # env var holding the API key; None = no key needed
+    # 0 makes code generation repeatable. None = provider default, for reasoning
+    # models that reject any other value.
+    temperature: float | None = None
 
 
 PRESETS: dict[str, ProviderPreset] = {
-    "ollama": ProviderPreset("ollama", "http://localhost:11434", "llama3.1", None),
+    "ollama": ProviderPreset("ollama", "http://localhost:11434", "llama3.1", None, 0.0),
     "openai": ProviderPreset("openai", "https://api.openai.com/v1", "gpt-6-luna", "OPENAI_API_KEY"),
     "groq": ProviderPreset(
-        "openai", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"
+        "openai", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY", 0.0
     ),
 }
 DEFAULT_PROVIDER = "ollama"
