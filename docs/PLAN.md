@@ -5,11 +5,11 @@ Agreed 2026-11-03. Each step lands as its own pull request.
 1. **Skeleton and metadata extraction** (done, PR #1). Python 3.11+ package, typer CLI,
    pytest + ruff + GitHub Actions. CSV/XLSX loader, `DatasetProfile`, privacy tiers,
    synthetic dirty sample generator.
-2. **Provider layer (BYOK)** (this step). `LLMProvider` interface; Ollama and one
+2. **Provider layer (BYOK)** (done, PR #2). `LLMProvider` interface; Ollama and one
    OpenAI-compatible client (OpenAI, Groq) over plain `httpx`. Config from `.env` and
    `~/.config/schema-engine/config.json`. `test-connection` sends a one-token request.
    Tests use a fake provider so CI never needs keys.
-3. **Code generation, sandbox, self-healing.** Constrained prompt and code extraction;
+3. **Code generation, sandbox, self-healing** (this step). Constrained prompt and code extraction;
    generated `transform(df)` runs in a subprocess with a timeout, import allowlist and no
    network. Tracebacks go back to the model for up to N retries. Token usage logged per run.
 4. **Docs and polish.** Architecture diagram, demo run on Ollama, coverage badge.
