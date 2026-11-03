@@ -1,6 +1,13 @@
+import builtins
+import socket
+import subprocess
+import sys
+
+import pandas as pd
 import pytest
 
-from schema_engine.sandbox import check_code
+from schema_engine import _runner
+from schema_engine.sandbox import check_code, run_transform
 
 GOOD = """
 import re
@@ -74,3 +81,131 @@ def test_syntax_error():
     assert check_code("def transform(df)\n    return df\n") == [
         "SyntaxError on line 1: expected ':'"
     ]
+
+
+# --- running code -------------------------------------------------------------
+
+
+def write_job(workdir, code, df=None):
+    (df if df is not None else pd.DataFrame({"a": [" x "]})).to_pickle(workdir / "input.pkl")
+    (workdir / "transform.py").write_text(code, encoding="utf-8")
+
+
+def run_in_process(workdir, code, df=None):
+    """Run the child's main() here, so its guards are tested past the static check."""
+    write_job(workdir, code, df)
+    code_rc = _runner.main(workdir)
+    error = workdir / "error.txt"
+    return code_rc, error.read_text(encoding="utf-8") if error.exists() else None
+
+
+def test_run_transform_returns_typed_output(dirty_df):
+    code = """
+import pandas as pd
+
+
+def transform(df):
+    out = df.iloc[:, [0, 5, 6]].copy()
+    out.columns = ["order_id", "price", "qty"]
+    out["order_id"] = out["order_id"].str.strip()
+    out["price"] = pd.to_numeric(out["price"].str.replace(r"[^0-9.]", "", regex=True))
+    out["qty"] = pd.to_numeric(out["qty"], errors="coerce").astype("Int64")
+    return out.set_index("order_id", drop=False)
+"""
+    result = run_transform(code, dirty_df)
+    assert result.ok, result.error
+    assert list(result.output.columns) == ["order_id", "price", "qty"]
+    assert len(result.output) == len(dirty_df)
+    assert result.output["price"].dtype == "float64"
+    assert str(result.output["qty"].dtype) == "Int64"
+    assert list(result.output.index[:2]) == [0, 1]
+
+
+def test_run_transform_rejects_before_running(dirty_df):
+    result = run_transform("import os\ndef transform(df):\n    return df\n", dirty_df)
+    assert not result.ok
+    assert result.output is None
+    assert result.error == "Code rejected before running:\n- line 1: import of 'os' is not allowed"
+
+
+def test_run_transform_reports_only_generated_frames(dirty_df):
+    result = run_transform("def transform(df):\n    return df.iloc[:, 99]\n", dirty_df)
+    assert result.error.startswith("Traceback (generated code only):")
+    assert 'File "transform.py", line 2, in transform' in result.error
+    assert "return df.iloc[:, 99]" in result.error
+    assert result.error.endswith("IndexError: single positional indexer is out-of-bounds")
+    assert "_runner.py" not in result.error
+
+
+def test_run_transform_timeout(dirty_df):
+    result = run_transform(
+        "def transform(df):\n    while True:\n        pass\n", dirty_df, timeout=2
+    )
+    assert result.error == "TimeoutError: transform ran longer than 2s"
+
+
+def test_child_gets_no_api_keys_and_crashes_are_reported(monkeypatch, dirty_df):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-should-not-leak")
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen.update(kwargs, args=args)
+        return subprocess.CompletedProcess(args, 1, "", "Fatal Python error: boom\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = run_transform("def transform(df):\n    return df\n", dirty_df)
+    assert result.error == "Fatal Python error: boom"
+    assert "OPENAI_API_KEY" not in seen["env"]
+    assert "PATH" in seen["env"]
+    assert seen["args"][:4] == [sys.executable, "-I", "-m", "schema_engine._runner"]
+
+    monkeypatch.setattr(
+        subprocess, "run", lambda args, **kw: subprocess.CompletedProcess(args, 9, "", "")
+    )
+    assert run_transform("def transform(df):\n    return df\n", dirty_df).error == (
+        "sandbox exited with code 9"
+    )
+
+
+def test_runtime_blocks_files_network_and_imports(tmp_path):
+    rc, error = run_in_process(
+        tmp_path, 'def transform(df):\n    df.to_string(buf="x.txt")\n    return df\n'
+    )
+    assert rc == 1
+    assert error.endswith("PermissionError: file and network access are blocked in the sandbox")
+    assert not (tmp_path / "x.txt").exists()
+
+    _, error = run_in_process(tmp_path, "def transform(df):\n    import socket\n    return df\n")
+    assert error.endswith("ImportError: import of 'socket' is not allowed")
+
+    # Guards are lifted once the transform is done.
+    assert builtins.open.__name__ == "open"
+    assert builtins.__import__.__name__ == "__import__"
+    assert socket.socket.connect.__name__ == "connect"
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ("return 5", "TypeError: transform must return a DataFrame, got int"),
+        (
+            'return pd.DataFrame([[1, 2]], columns=["a", "a"])',
+            "ValueError: output column names must be unique, duplicated: ['a']",
+        ),
+        (
+            'return pd.DataFrame([[1]], columns=[" "])',
+            "ValueError: output column names must be non-empty strings, got [' ']",
+        ),
+        ("raise SystemExit(3)", "SystemExit: 3"),
+    ],
+)
+def test_output_checks(tmp_path, body, message):
+    rc, error = run_in_process(tmp_path, f"import pandas as pd\ndef transform(df):\n    {body}\n")
+    assert rc == 1
+    assert error.endswith(message)
+
+
+def test_runner_success_writes_output(tmp_path):
+    rc, error = run_in_process(tmp_path, "def transform(df):\n    return df.assign(b=1)\n")
+    assert (rc, error) == (0, None)
+    assert '"b":1' in (tmp_path / "output.json").read_text(encoding="utf-8")

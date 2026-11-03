@@ -14,6 +14,15 @@ container or VM.
 from __future__ import annotations
 
 import ast
+import os
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass
+from io import StringIO
+from pathlib import Path
+
+import pandas as pd
 
 ALLOWED_IMPORTS = frozenset(
     {
@@ -96,6 +105,57 @@ ALLOWED_TO_METHODS = frozenset(
         "to_timestamp",
     }
 )
+
+
+ERROR_LIMIT = 2000
+"""Characters of error text kept, from the end, so retries stay cheap."""
+
+# Everything else (API keys included) stays out of the child's environment.
+_CHILD_ENV = ("PATH", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL")
+
+
+@dataclass(frozen=True)
+class SandboxResult:
+    output: pd.DataFrame | None
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
+
+
+def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> SandboxResult:
+    """Check ``code``, then run its ``transform(df)`` on a copy of ``df`` in a child process."""
+    problems = check_code(code)
+    if problems:
+        listed = "\n".join(f"- {p}" for p in problems)
+        return SandboxResult(None, f"Code rejected before running:\n{listed}")
+
+    with tempfile.TemporaryDirectory(prefix="schema-engine-") as tmp:
+        work = Path(tmp)
+        df.to_pickle(work / "input.pkl")
+        (work / "transform.py").write_text(code, encoding="utf-8")
+        env = {k: os.environ[k] for k in _CHILD_ENV if k in os.environ}
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-I", "-m", "schema_engine._runner", str(work)],
+                cwd=work,
+                env=env,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.TimeoutExpired:
+            return SandboxResult(None, f"TimeoutError: transform ran longer than {timeout:g}s")
+        if proc.returncode == 0:
+            text = (work / "output.json").read_text(encoding="utf-8")
+            return SandboxResult(pd.read_json(StringIO(text), orient="table"))
+        error_file = work / "error.txt"
+        if error_file.exists():
+            error = error_file.read_text(encoding="utf-8")
+        else:
+            error = proc.stderr.strip() or f"sandbox exited with code {proc.returncode}"
+        return SandboxResult(None, error[-ERROR_LIMIT:])
 
 
 def check_code(code: str) -> list[str]:
