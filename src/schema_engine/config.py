@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -63,7 +63,7 @@ class Settings:
     provider: str
     model: str
     base_url: str
-    api_key: str | None
+    api_key: str | None = field(repr=False)  # keep keys out of logs and tracebacks
     timeout: float = 60.0
     max_retries: int = 2
 
