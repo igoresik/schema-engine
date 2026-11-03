@@ -45,15 +45,6 @@ PRESETS: dict[str, ProviderPreset] = {
     "groq": ProviderPreset(
         "openai", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "GROQ_API_KEY"
     ),
-    "openrouter": ProviderPreset(
-        "openai", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini", "OPENROUTER_API_KEY"
-    ),
-    "gemini": ProviderPreset(
-        "openai",
-        "https://generativelanguage.googleapis.com/v1beta/openai",
-        "gemini-2.0-flash",
-        "GEMINI_API_KEY",
-    ),
 }
 DEFAULT_PROVIDER = "ollama"
 
