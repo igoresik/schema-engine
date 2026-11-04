@@ -1,4 +1,6 @@
 import json
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -257,11 +259,22 @@ def test_preset_checked_before_spending_tokens(clean_env, monkeypatch, orders):
     use_fake(monkeypatch, fake)
     result = runner.invoke(app, ["run", str(orders), "x", "--preset", "nope"])
     assert result.exit_code == 2
-    assert "Unknown preset 'nope'. Choose one of: shopify." in result.stderr
+    assert "Unknown preset 'nope'. Choose one of: shopify, sqlite." in result.stderr
     result = runner.invoke(app, ["run", str(orders), "x", "--preset", "shopify", "-o", "a.xlsx"])
     assert result.exit_code == 2
     assert "The shopify preset writes .csv files, not '.xlsx'." in result.stderr
     assert fake.calls == []
+
+
+def test_sqlite_preset_writes_a_loadable_script(clean_env, monkeypatch, orders):
+    use_fake(monkeypatch, FakeProvider([GOOD]))
+    result = runner.invoke(app, ["run", str(orders), "x", "--preset", "sqlite"])
+    assert result.exit_code == 0, result.output
+    out = orders.with_name("dirty_orders_clean.sql")
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.executescript(out.read_text(encoding="utf-8"))
+        rows = db.execute("SELECT order_id, email FROM dirty_orders_clean").fetchall()
+    assert len(rows) == len(load_dataset(orders))
 
 
 def test_write_errors_after_the_model_keep_the_transform(clean_env, monkeypatch, orders):
