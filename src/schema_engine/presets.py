@@ -19,6 +19,13 @@ class ExportPreset:
     """Added to the task so the model knows the target format."""
     check: Callable[[pd.DataFrame], list[str]]
     """Problems with an output. They go back to the model, so they never quote cell values."""
+    finish: Callable[[pd.DataFrame], pd.DataFrame]
+    """Safe fixes that need no model, run before the check."""
+
+    def fit(self, df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+        """The finished output and its problems. No problems means it can be written."""
+        out = self.finish(df)
+        return out, self.check(out)
 
 
 # Current header names from Shopify's product CSV docs (help.shopify.com, checked 2026-11-04).
@@ -55,7 +62,7 @@ SHOPIFY_COLUMNS = (
     "SEO description",
 )
 
-_TRUE_FALSE = (r"true|false", "the text true or false")
+_TRUE_FALSE = (r"true|false", "true or false")
 _PRICE = (r"\d+(?:\.\d+)?", "a plain number like 9.99")
 SHOPIFY_FORMATS = {
     "Published on online store": _TRUE_FALSE,
@@ -87,13 +94,31 @@ The output is a Shopify product import CSV.
 numbers and single dashes, made from the title (Black Sunglasses -> black-sunglasses).
 - Extra variant or image rows of a product repeat its URL handle and leave Title, \
 Description, Vendor and Tags blank.
-- Published on online store, Charge tax, Requires shipping, Gift card: the text true or false.
+- Published on online store, Charge tax, Requires shipping, Gift card: true or false.
 - Status: active, draft or archived. Continue selling when out of stock: deny or continue.
 - Price, Compare-at price, Cost per item: plain numbers like 9.99, no currency symbol.
-- Inventory quantity, Weight value (grams), Image position: whole numbers. Use a nullable \
-Int64 column or text, because a float column writes 5125.0.
+- Inventory quantity, Weight value (grams), Image position: whole numbers.
 - Leave unknown cells empty (None), never a placeholder like N/A.
 """
+
+_WHOLE_NUMBERS = ("Inventory quantity", "Weight value (grams)", "Image position")
+_TRUE_FALSE_COLUMNS = ("Published on online store", "Charge tax", "Requires shipping", "Gift card")
+
+
+def finish_shopify(df: pd.DataFrame) -> pd.DataFrame:
+    """Whole floats back to ints (one empty cell turns an int column to floats), bools to text."""
+    out = df.copy()
+    for column in out.columns:
+        values = out[column]
+        if column in _WHOLE_NUMBERS and pd.api.types.is_float_dtype(values):
+            known = values.dropna()
+            if (known % 1 == 0).all() and known.abs().lt(2**53).all():
+                out[column] = values.astype("Int64")
+        elif column in _TRUE_FALSE_COLUMNS:
+            out[column] = values.map(
+                lambda v: str(bool(v)).lower() if isinstance(v, bool | np.bool_) else v
+            )
+    return out
 
 
 def check_shopify(df: pd.DataFrame) -> list[str]:
@@ -141,5 +166,5 @@ def _rows(mask: pd.Series) -> str:
 
 
 EXPORT_PRESETS = {
-    "shopify": ExportPreset("shopify", ".csv", SHOPIFY_RULES, check_shopify),
+    "shopify": ExportPreset("shopify", ".csv", SHOPIFY_RULES, check_shopify, finish_shopify),
 }

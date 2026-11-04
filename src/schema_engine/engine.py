@@ -77,19 +77,21 @@ def compile_transform(
         completion = provider.complete(messages, max_tokens=MAX_TOKENS, temperature=temperature)
         code = extract_code(completion.text)
         result = run_transform(code, df, timeout=timeout)
-        problems = preset.check(result.output) if preset and result.output is not None else []
+        output, problems = result.output, []
+        if preset and output is not None:
+            output, problems = preset.fit(output)
         error = None
         if result.error is not None:
             error = scrub_error(result.error, df, code, privacy_mode)
         elif preset and problems:
             scrub = _scrubber(df, code, privacy_mode)
-            error = preset_error(preset.name, problems, result.output.columns, scrub)
+            error = preset_error(preset.name, problems, output.columns, scrub)
         attempt = Attempt(number, code, completion.usage, completion.latency_ms, error)
         attempts.append(attempt)
         if on_attempt:
             on_attempt(attempt)
         if error is None:
-            return CompileResult(attempts, result.output)
+            return CompileResult(attempts, output)
         # Only the latest try goes back, so each retry costs about the same.
         messages = [*base, Message("assistant", completion.text), repair_message(error or "")]
     return CompileResult(attempts)

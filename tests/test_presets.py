@@ -67,7 +67,7 @@ def test_value_formats_never_quote_cells():
     )
     problems = check_shopify(df)
     assert problems == [
-        "'Published on online store' must be the text true or false (rows 1, 2)",
+        "'Published on online store' must be true or false (rows 1, 2)",
         "'Status' must be active, draft or archived (rows 1, 3)",
         "'Price' must be a plain number like 9.99 (row 1)",
         "'Inventory quantity' must be a whole number (rows 1, 3)",
@@ -88,3 +88,27 @@ def test_row_list_is_capped():
 
 def test_empty_output_passes():
     assert check_shopify(pd.DataFrame(columns=["Title", "URL handle"])) == []
+
+
+def test_fit_fixes_whole_floats_and_bools_first():
+    df = pd.DataFrame(
+        {
+            "Title": ["a", "b", "c"],
+            "URL handle": ["a", "b", "c"],
+            "Inventory quantity": [3.0, None, -1.0],
+            "Weight value (grams)": [120.5, None, 1.0],
+            "Gift card": [True, False, None],
+            "Charge tax": [True, False, True],
+            "Price": [9.0, 10.0, None],
+        }
+    )
+    out, problems = EXPORT_PRESETS["shopify"].fit(df)
+    assert str(out["Inventory quantity"].dtype) == "Int64"
+    assert out["Inventory quantity"].iloc[[0, 2]].tolist() == [3, -1]
+    assert out["Gift card"].iloc[:2].tolist() == ["true", "false"]
+    assert pd.isna(out["Gift card"].iloc[2])
+    assert out["Charge tax"].tolist() == ["true", "false", "true"]
+    assert out["Price"].iloc[:2].tolist() == [9.0, 10.0]
+    # 120.5 isn't whole, so the column stays as it was and the check reports it.
+    assert problems == ["'Weight value (grams)' must be a whole number of grams (rows 1, 3)"]
+    assert df["Charge tax"].tolist() == [True, False, True]

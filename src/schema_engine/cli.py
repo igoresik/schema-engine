@@ -225,11 +225,11 @@ def apply(
     result = run_transform(script.read_text(encoding="utf-8"), df, timeout=timeout)
     if result.output is None:
         _fail(result.error or "transform failed")
-    problems = target.check(result.output) if target else []
+    cleaned, problems = target.fit(result.output) if target else (result.output, [])
     if target and problems:
-        _fail(preset_error(target.name, problems, result.output.columns, lambda text: text))
-    save_dataset(result.output, output)
-    typer.echo(f"{len(result.output)} rows -> {output}")
+        _fail(preset_error(target.name, problems, cleaned.columns, lambda text: text))
+    save_dataset(cleaned, output)
+    typer.echo(f"{len(cleaned)} rows -> {output}")
 
 
 def _load(path: Path, sheet: str) -> pd.DataFrame:
