@@ -262,3 +262,22 @@ def test_preset_checked_before_spending_tokens(clean_env, monkeypatch, orders):
     assert result.exit_code == 2
     assert "The shopify preset writes .csv files, not '.xlsx'." in result.stderr
     assert fake.calls == []
+
+
+def test_write_errors_after_the_model_keep_the_transform(clean_env, monkeypatch, orders):
+    clash = (
+        "```python\ndef transform(df):\n"
+        "    return df.iloc[:, :2].set_axis(['Id', 'id'], axis=1)\n```"
+    )
+    use_fake(monkeypatch, FakeProvider([clash]))
+    result = runner.invoke(app, ["run", str(orders), "x", "-o", str(orders.with_name("o.sql"))])
+    assert result.exit_code == 1
+    assert "Can't write the SQLite table: duplicate column name: id" in result.stderr
+    assert "transform -> " in result.stderr
+    assert orders.with_name("dirty_orders_transform.py").exists()
+    script = str(orders.with_name("dirty_orders_transform.py"))
+    result = runner.invoke(
+        app, ["apply", script, str(orders), "-o", str(orders.with_name("o.sql"))]
+    )
+    assert result.exit_code == 1
+    assert "transform -> " not in result.stderr
