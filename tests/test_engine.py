@@ -1,8 +1,15 @@
 import pandas as pd
 import pytest
 
-from schema_engine.engine import MAX_TOKENS, CompileResult, compile_transform, scrub_error
-from schema_engine.privacy import PrivacyMode
+from schema_engine.engine import (
+    MAX_TOKENS,
+    CompileResult,
+    compile_transform,
+    preset_error,
+    scrub_error,
+)
+from schema_engine.presets import EXPORT_PRESETS
+from schema_engine.privacy import PrivacyMode, mask_string
 from schema_engine.providers import AuthenticationError, FakeProvider, Usage
 
 GOOD = """```python
@@ -124,4 +131,47 @@ def test_scrub_keeps_what_the_model_wrote():
     )
     assert scrub_error(error, df, "not python (", PrivacyMode.NONE) == (
         "time data '<value>' doesn't match format '<value>'"
+    )
+
+
+NAMES_A_COLUMN_FROM_A_CELL = """```python
+import pandas as pd
+
+
+def transform(df):
+    out = pd.DataFrame({"Title": df["name"], "URL handle": ["black-sunglasses", "b"]})
+    out[df["email"].iloc[0]] = 1
+    return out
+```"""
+
+BAD_STATUS = NAMES_A_COLUMN_FROM_A_CELL.replace(
+    'out[df["email"].iloc[0]] = 1', 'out["Status"] = "live"'
+)
+GOOD_STATUS = BAD_STATUS.replace('"live"', '"draft"')
+
+
+def test_preset_check_failures_are_retried():
+    df = pd.DataFrame({"name": ["Black Sunglasses", "active"], "email": ["jane@corp.com", None]})
+    fake = FakeProvider([NAMES_A_COLUMN_FROM_A_CELL, BAD_STATUS, GOOD_STATUS])
+    result = compile_transform(df, "x", fake, preset=EXPORT_PRESETS["shopify"])
+    assert result.ok
+    assert list(result.output["Status"]) == ["draft", "draft"]
+    assert "\n\nThe output is a Shopify product import CSV." in fake.calls[0][1].content
+
+    first, second, _ = result.attempts
+    assert first.error == (
+        f"- '{mask_string('jane@corp.com')}' isn't a Shopify product column. "
+        "Use the exact names from the list\nOutput doesn't fit the shopify format (1 problem)"
+    )
+    assert "jane@corp.com" not in fake.calls[1][3].content
+    # "active" is also a cell value; fixed text must not be scrubbed.
+    assert second.error == (
+        "- 'Status' must be active, draft or archived (rows 1, 2)\n"
+        "Output doesn't fit the shopify format (1 problem)"
+    )
+
+
+def test_preset_error_lists_every_problem():
+    assert preset_error("x", ["'a' bad", "b"], ["a"], lambda text: text) == (
+        "- 'a' bad\n- b\nOutput doesn't fit the x format (2 problems)"
     )
