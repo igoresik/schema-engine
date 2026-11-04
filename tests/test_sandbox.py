@@ -205,6 +205,17 @@ def test_output_checks(tmp_path, body, message):
     assert error.endswith(message)
 
 
+def test_dates_that_cant_be_read_back_go_to_the_model(dirty_df):
+    code = (
+        "import pandas as pd\n"
+        "def transform(df):\n"
+        "    return pd.DataFrame({'d': pd.to_datetime(['1470-01-01'])})\n"
+    )
+    result = run_transform(code, dirty_df)
+    assert result.output is None
+    assert "Out of bounds" in result.error
+
+
 def test_stdlib_helpers_that_import_lazily_still_work(tmp_path):
     code = (
         "from datetime import datetime\n"
