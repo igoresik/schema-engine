@@ -24,7 +24,9 @@ opt in.
  └────────────────────────────────────────────────────┘
 ```
 
-Licensed MIT. Status: version 0.2.0, works end to end; not yet tried on a real model. See [docs/PLAN.md](docs/PLAN.md).
+Licensed MIT. Status: version 0.2.1, works end to end; small local models rarely write a
+working transform yet (see [Tried on real models](#tried-on-real-models)). See
+[docs/PLAN.md](docs/PLAN.md).
 
 ## Quick start
 
@@ -207,6 +209,33 @@ the request fails and 2 when the configuration is incomplete.
 
 Cost stays flat as files grow: the prompt depends on the number of columns, never on the
 number of rows, and a saved transform can be reused for free with `apply`.
+
+## Tried on real models
+
+On 4 November 2026 the engine ran on Ollama 0.40.14 (laptop GPU, 8 GB) with `llama3.1`
+(8B, the default) and `qwen2.5-coder:7b`, against the dirty sample and a 5-row product
+list, with and without both presets.
+
+The engine side worked: requests, token counts, errors and preset problems going back to
+the model, and the retries. The models were the weak part. About 20 runs, most with 3
+tries, gave one transform that passed (llama3.1, Shopify preset, first try), and that one
+still left out the price column. Typical mistakes were pandas 1.x calls that pandas 3
+removed (`applymap`, `DataFrame.append`), a list passed as one date format, and columns
+picked by names that don't exist.
+
+Three fixes came out of it:
+
+- A transform that returns dates outside 1677-2262 no longer crashes `run`. The error
+  goes back to the model.
+- When headers are blank or repeated, the prompt names their exact positions
+  (`df.iloc[:, 4]`). That stopped the `'DataFrame' object has no attribute 'str'` error
+  that kept coming back in the first runs.
+- The Shopify preset turns whole-number floats back into integers itself, after a run
+  where the only problems left were whole numbers written as `14.0`.
+
+For real work, use a bigger model, for example `groq` with `llama-3.3-70b-versatile`.
+Small local models are fine for trying the tool on data that must stay on your machine,
+but expect to edit the saved transform.
 
 ## Development
 
