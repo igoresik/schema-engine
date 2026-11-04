@@ -93,21 +93,29 @@ def test_sql_script_loads_into_sqlite(tmp_path):
             "when": [date(2024, 1, 2), datetime(2024, 1, 2, 3, 4)],
             "big": [2**70, 5],
             "misc": [Decimal("1.10"), [1, 2]],
+            "odd": [b"\x00\xff", "a\x00b"],
+            "low": [-float("inf"), 1e-05],
         }
     )
     path = tmp_path / "nested" / "my orders.sql"
     save_dataset(df, path)
+    script = path.read_text(encoding="utf-8")
+    # Older SQLite would dump infinity as Inf, which doesn't load.
+    assert "Inf" not in script
     with closing(sqlite3.connect(":memory:")) as db:
-        db.executescript(path.read_text(encoding="utf-8"))
+        db.executescript(script)
         ddl = db.execute("SELECT sql FROM sqlite_master").fetchone()[0]
         rows = db.execute('SELECT * FROM "my orders"').fetchall()
-    types = ["INTEGER", "REAL", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"]
-    names = ['"id"', '"price"', '"ok"', '"day"', '"at"', '"na""me"', '"when"', '"big"', '"misc"']
-    columns = ",\n".join(f"  {n} {t}" for n, t in zip(names, types, strict=True))
+    types = ["INTEGER", "REAL", "INTEGER"] + ["TEXT"] * 7 + ["REAL"]
+    names = ["id", "price", "ok", "day", "at", 'na""me', "when", "big", "misc", "odd", "low"]
+    columns = ",\n".join(f'  "{n}" {t}' for n, t in zip(names, types, strict=True))
     assert ddl == f'CREATE TABLE "my orders" (\n{columns}\n)'
     first = (1, 9.99, 1, "2024-03-15", "2024-03-15 10:30:00", "it's\nfine", "2024-01-02")
     second = (None, float("inf"), 0, None, "2024-03-16 00:00:00", None, "2024-01-02 03:04:00")
-    assert rows == [(*first, str(2**70), "1.10"), (*second, "5", "[1, 2]")]
+    assert rows == [
+        (*first, str(2**70), "1.10", b"\x00\xff", -float("inf")),
+        (*second, "5", "[1, 2]", "a\x00b", 1e-05),
+    ]
 
 
 def test_sql_names_that_clash_in_sqlite(tmp_path):

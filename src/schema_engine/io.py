@@ -10,6 +10,7 @@ alone and reported by the profiler instead.
 from __future__ import annotations
 
 import csv
+import math
 import sqlite3
 from contextlib import closing
 from datetime import date, datetime
@@ -60,19 +61,37 @@ def save_dataset(df: pd.DataFrame, path: str | Path) -> None:
 def sqlite_script(df: pd.DataFrame, table: str) -> str:
     """``CREATE TABLE`` and ``INSERT`` statements in one transaction: ``sqlite3 my.db < file``.
 
-    The rows go through an in-memory database and come back with ``iterdump``, so
-    SQLite does the quoting. Dates become ISO 8601 text and bools 0/1.
+    SQLite checks the ``CREATE TABLE`` first, so names it can't take (``Name`` next to
+    ``name``) fail before anything is written. The values are written here rather than
+    by ``iterdump``, because older SQLite dumps infinity as ``Inf``, which won't load.
+    Dates become ISO 8601 text and bools 0/1.
     """
-    columns = ",\n".join(f"  {_quote(str(name))} {_sql_type(col)}" for name, col in df.items())
-    rows = list(zip(*(_sql_values(col) for _, col in df.items()), strict=True))
-    marks = ", ".join("?" * df.shape[1])
+    name = _quote(table)
+    columns = ",\n".join(f"  {_quote(str(c))} {_sql_type(col)}" for c, col in df.items())
+    create = f"CREATE TABLE {name} (\n{columns}\n)"
     with closing(sqlite3.connect(":memory:")) as db:
         try:
-            db.execute(f"CREATE TABLE {_quote(table)} (\n{columns}\n)")
-            db.executemany(f"INSERT INTO {_quote(table)} VALUES ({marks})", rows)
+            db.execute(create)
         except sqlite3.Error as exc:
             raise ValueError(f"Can't write the SQLite table: {exc}") from exc
-        return "\n".join(db.iterdump()) + "\n"
+    values = [[_literal(v) for v in _sql_values(col)] for _, col in df.items()]
+    rows = (f"INSERT INTO {name} VALUES({','.join(row)});" for row in zip(*values, strict=True))
+    return "\n".join(["BEGIN TRANSACTION;", f"{create};", *rows, "COMMIT;"]) + "\n"
+
+
+def _literal(v: object) -> str:
+    if v is None:
+        return "NULL"
+    if isinstance(v, float):
+        return repr(v) if math.isfinite(v) else ("9e999" if v > 0 else "-9e999")
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, bytes):
+        return f"X'{v.hex()}'"
+    text = str(v)
+    if "\x00" in text:  # a NUL can't sit inside a text literal
+        return f"CAST(X'{text.encode().hex()}' AS TEXT)"
+    return "'" + text.replace("'", "''") + "'"
 
 
 def _quote(name: str) -> str:
