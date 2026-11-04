@@ -30,8 +30,12 @@ position with df.iloc[:, i] when a name is not unique.
 """
 
 
-def build_messages(profile: DatasetProfile, instruction: str) -> list[Message]:
-    user = f"Task: {instruction.strip()}\n\nData profile (JSON):\n{profile.to_json()}"
+def build_messages(profile: DatasetProfile, instruction: str, rules: str = "") -> list[Message]:
+    """``rules`` are a preset's output format, placed after the task."""
+    task = f"Task: {instruction.strip()}"
+    if rules:
+        task += f"\n\n{rules.strip()}"
+    user = f"{task}\n\nData profile (JSON):\n{profile.to_json()}"
     return [Message("system", SYSTEM_PROMPT), Message("user", user)]
 
 

@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 from schema_engine import __version__
 from schema_engine.cli import _default_output, app
 from schema_engine.io import load_dataset
+from schema_engine.presets import EXPORT_PRESETS
 from schema_engine.providers import AuthenticationError, FakeProvider, RateLimits
 from schema_engine.samples import write_samples
 
@@ -208,3 +209,56 @@ def test_apply_reports_errors_and_excel_output(clean_env, orders, tmp_path):
 )
 def test_default_output(name, expected):
     assert _default_output(Path(name)) == Path(expected)
+    assert _default_output(Path(name), EXPORT_PRESETS["shopify"]) == Path("a_clean.csv")
+
+
+SHOPIFY = """```python
+import pandas as pd
+
+
+def transform(df):
+    n = len(df)
+    out = pd.DataFrame({"Title": ["Item"] * n, "URL handle": [f"item-{i}" for i in range(n)]})
+    out["Status"] = "draft"
+    return out
+```"""
+
+
+def test_run_and_apply_with_a_preset(clean_env, monkeypatch, orders):
+    fake = FakeProvider([SHOPIFY.replace('"draft"', '"live"'), SHOPIFY])
+    use_fake(monkeypatch, fake)
+    result = runner.invoke(
+        app, ["run", str(orders), "make it a shopify import", "--preset", "shopify"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "attempt 1: failed, Output doesn't fit the shopify format (1 problem)" in result.stderr
+    assert "The output is a Shopify product import CSV." in fake.calls[0][1].content
+    out = orders.with_name("dirty_orders_clean.csv")
+    assert list(load_dataset(out).columns) == ["Title", "URL handle", "Status"]
+
+    script = orders.with_name("dirty_orders_transform.py")
+    text = script.read_text(encoding="utf-8")
+    assert "apply dirty_orders_transform.py dirty_orders.csv --preset shopify\n" in text
+    again = orders.with_name("again.csv")
+    args = ["apply", str(script), str(orders), "-o", str(again), "--preset", "SHOPIFY"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+
+    script.write_text(text.replace('"draft"', '"live"'), encoding="utf-8")
+    again.unlink()
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert "- 'Status' must be active, draft or archived (rows 1, 2, 3, 4, 5 and" in result.stderr
+    assert not again.exists()
+
+
+def test_preset_checked_before_spending_tokens(clean_env, monkeypatch, orders):
+    fake = FakeProvider([SHOPIFY])
+    use_fake(monkeypatch, fake)
+    result = runner.invoke(app, ["run", str(orders), "x", "--preset", "nope"])
+    assert result.exit_code == 2
+    assert "Unknown preset 'nope'. Choose one of: shopify." in result.stderr
+    result = runner.invoke(app, ["run", str(orders), "x", "--preset", "shopify", "-o", "a.xlsx"])
+    assert result.exit_code == 2
+    assert "The shopify preset writes .csv files, not '.xlsx'." in result.stderr
+    assert fake.calls == []
