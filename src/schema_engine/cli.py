@@ -11,7 +11,7 @@ import typer
 
 from schema_engine import __version__
 from schema_engine.config import ConfigError, Settings, load_settings
-from schema_engine.engine import Attempt, CompileResult, compile_transform
+from schema_engine.engine import Attempt, CompileResult, compile_transform, preset_error
 from schema_engine.io import (
     EXCEL_SUFFIXES,
     WRITE_SUFFIXES,
@@ -19,6 +19,7 @@ from schema_engine.io import (
     load_dataset,
     save_dataset,
 )
+from schema_engine.presets import EXPORT_PRESETS, ExportPreset
 from schema_engine.privacy import PrivacyMode
 from schema_engine.profile import build_profile
 from schema_engine.providers import ProviderError, create_provider
@@ -30,6 +31,8 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+_PRESET_HELP = f"Target format the output must fit: {', '.join(EXPORT_PRESETS)}."
 
 
 def _version(value: bool) -> None:
@@ -144,11 +147,13 @@ def run(
         int, typer.Option(min=1, max=10, help="Max tries, counting self-healing retries.")
     ] = 3,
     timeout: Annotated[float, typer.Option(min=1, help="Seconds the transform may run.")] = 30.0,
+    preset: Annotated[str | None, typer.Option(help=_PRESET_HELP)] = None,
 ) -> None:
     """Have the LLM write a transform for PATH, run it in the sandbox, and save both."""
-    output = output or _default_output(path)
+    target = _preset(preset)
+    output = output or _default_output(path, target)
     save = save or path.with_name(f"{path.stem}_transform.py")
-    _check_writable(output)
+    _check_writable(output, target)
     df = _load(path, sheet)
     try:
         settings = load_settings(provider=provider, model=model, base_url=base_url)
@@ -175,6 +180,7 @@ def run(
             max_attempts=attempts,
             timeout=timeout,
             temperature=settings.preset.temperature,
+            preset=target,
             on_attempt=report,
         )
     except ProviderError as exc:
@@ -193,7 +199,7 @@ def run(
         last = result.attempts[-1].error
         _fail(f"No working transform after {len(result.attempts)} attempts. Last error:\n{last}")
     save.parent.mkdir(parents=True, exist_ok=True)
-    save.write_text(_script(result, path, save, instruction, settings), encoding="utf-8")
+    save.write_text(_script(result, path, save, instruction, settings, target), encoding="utf-8")
     save_dataset(result.output, output)
     typer.echo(f"{len(result.output)} rows -> {output}")
     typer.echo(f"transform -> {save}")
@@ -209,14 +215,19 @@ def apply(
     ] = None,
     sheet: Annotated[str, typer.Option(help="Excel sheet name or index.")] = "0",
     timeout: Annotated[float, typer.Option(min=1, help="Seconds the transform may run.")] = 30.0,
+    preset: Annotated[str | None, typer.Option(help=_PRESET_HELP)] = None,
 ) -> None:
     """Run a saved transform on PATH in the sandbox. No LLM, no tokens."""
-    output = output or _default_output(path)
-    _check_writable(output)
+    target = _preset(preset)
+    output = output or _default_output(path, target)
+    _check_writable(output, target)
     df = _load(path, sheet)
     result = run_transform(script.read_text(encoding="utf-8"), df, timeout=timeout)
     if result.output is None:
         _fail(result.error or "transform failed")
+    problems = target.check(result.output) if target else []
+    if target and problems:
+        _fail(preset_error(target.name, problems, result.output.columns, lambda text: text))
     save_dataset(result.output, output)
     typer.echo(f"{len(result.output)} rows -> {output}")
 
@@ -233,16 +244,27 @@ def _fail(message: str, *, code: int = 1) -> NoReturn:
     raise typer.Exit(code=code)
 
 
-def _default_output(path: Path) -> Path:
-    suffix = path.suffix.lower()
+def _preset(name: str | None) -> ExportPreset | None:
+    if name is None:
+        return None
+    if name.lower() not in EXPORT_PRESETS:
+        _fail(f"Unknown preset '{name}'. Choose one of: {', '.join(EXPORT_PRESETS)}.", code=2)
+    return EXPORT_PRESETS[name.lower()]
+
+
+def _default_output(path: Path, target: ExportPreset | None = None) -> Path:
+    suffix = target.suffix if target else path.suffix.lower()
     if suffix not in WRITE_SUFFIXES:
         suffix = ".xlsx" if suffix in EXCEL_SUFFIXES else ".csv"
     return path.with_name(f"{path.stem}_clean{suffix}")
 
 
-def _check_writable(output: Path) -> None:
+def _check_writable(output: Path, target: ExportPreset | None = None) -> None:
     """Fail before spending tokens on a file type that can't be written."""
-    if output.suffix.lower() not in WRITE_SUFFIXES:
+    suffix = output.suffix.lower()
+    if target and suffix != target.suffix:
+        _fail(f"The {target.name} preset writes {target.suffix} files, not '{suffix}'.", code=2)
+    if suffix not in WRITE_SUFFIXES:
         _fail(f"Can't write '{output.suffix}' files. Use .csv, .tsv or .xlsx.", code=2)
 
 
@@ -251,15 +273,21 @@ def _last_line(error: str) -> str:
 
 
 def _script(
-    result: CompileResult, path: Path, save: Path, instruction: str, settings: Settings
+    result: CompileResult,
+    path: Path,
+    save: Path,
+    instruction: str,
+    settings: Settings,
+    target: ExportPreset | None = None,
 ) -> str:
     task = "\n".join(f"#   {line}" for line in instruction.strip().splitlines())
+    flag = f" --preset {target.name}" if target else ""
     header = (
         f"# schema-engine transform for {path.name}, made {date.today().isoformat()}\n"
         f"# Task:\n{task}\n"
         f"# Model: {settings.provider}/{settings.model}, {len(result.attempts)} attempt(s), "
         f"{result.usage.total_tokens} tokens\n"
-        f"# Run it again without the model: schema-engine apply {save.name} {path.name}\n\n"
+        f"# Run it again without the model: schema-engine apply {save.name} {path.name}{flag}\n\n"
     )
     return header + (result.code or "")
 
