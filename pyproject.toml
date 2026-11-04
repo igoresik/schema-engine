@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "schema-engine"
-version = "0.2.0"
+version = "0.2.1"
 description = "Cost-aware AI ETL engine: an LLM writes Pandas transforms from metadata only, and they run locally in a sandbox."
 readme = "README.md"
 requires-python = ">=3.11"
