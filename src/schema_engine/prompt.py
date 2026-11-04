@@ -33,10 +33,26 @@ position with df.iloc[:, i] when a name is not unique.
 def build_messages(profile: DatasetProfile, instruction: str, rules: str = "") -> list[Message]:
     """``rules`` are a preset's output format, placed after the task."""
     task = f"Task: {instruction.strip()}"
-    if rules:
-        task += f"\n\n{rules.strip()}"
+    for extra in (rules.strip(), _position_note(profile)):
+        if extra:
+            task += f"\n\n{extra}"
     user = f"{task}\n\nData profile (JSON):\n{profile.to_json()}"
     return [Message("system", SYSTEM_PROMPT), Message("user", user)]
+
+
+def _position_note(profile: DatasetProfile) -> str:
+    # Small models skip the general rule; naming the exact positions works better.
+    risky = [
+        f"df.iloc[:, {i}] ({c.name!r})"
+        for i, c in enumerate(profile.columns)
+        if {"duplicate", "unnamed"} & set(c.header_issues)
+    ]
+    if not risky:
+        return ""
+    return (
+        "Some column names are blank or repeat, so df[name] can't pick one column. "
+        f"Select these by position: {', '.join(risky)}."
+    )
 
 
 def repair_message(error: str) -> Message:
