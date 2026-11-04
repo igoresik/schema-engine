@@ -35,3 +35,5 @@ jobs:
           schema-engine profile samples/dirty_orders.csv --compact > /dev/null
           schema-engine profile samples/dirty_orders.xlsx --privacy-mode none --compact > /dev/null
           schema-engine apply examples/clean_orders.py samples/dirty_orders.csv -o samples/clean.csv
+          schema-engine apply examples/clean_orders.py samples/dirty_orders.csv -o samples/clean.sql
+          python -c "import sqlite3; sqlite3.connect(':memory:').executescript(open('samples/clean.sql').read())"

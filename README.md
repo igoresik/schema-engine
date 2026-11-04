@@ -24,7 +24,9 @@ opt in.
  └────────────────────────────────────────────────────┘
 ```
 
-Licensed MIT. Status: version 0.2.0, works end to end; not yet tried on a real model. See [docs/PLAN.md](docs/PLAN.md).
+Licensed MIT. Status: version 0.2.1, works end to end; small local models rarely write a
+working transform yet (see [Tried on real models](#tried-on-real-models)). See
+[docs/PLAN.md](docs/PLAN.md).
 
 ## Quick start
 
@@ -57,7 +59,7 @@ token count is printed as it happens, plus a total at the end.
 When a try works, `run` writes two files next to the input:
 
 - `NAME_clean.csv` (or `.tsv` / `.xlsx`, matching the input): the cleaned data. Change
-  it with `-o`.
+  it with `-o`, which also takes `.sql` (see [SQLite output](#sqlite-output)).
 - `NAME_transform.py`: the generated code, with a header saying which model wrote it and
   how many tokens it took. Change it with `--save`.
 
@@ -86,10 +88,27 @@ schema-engine apply products_transform.py next_month.xlsx --preset shopify
 | Preset | Writes | Checks |
 | --- | --- | --- |
 | `shopify` | `NAME_clean.csv` for Shopify's product import | Only Shopify's current column names (`URL handle`, not the old `Handle`); Title and URL handle present; handles in lowercase letters, numbers and dashes; true/false, status, price and whole-number columns in Shopify's format |
+| `sqlite` | `NAME_clean.sql`, a SQLite script | Column names in snake_case (`order_date`). The model is also told to avoid SQL keywords and give each column one real type |
 
-Before the check, a preset fixes what no model should have to think about: whole numbers
-stored as floats (`14.0`, which pandas makes when one cell is empty) go back to integers,
-and Python bools become `true`/`false`.
+Before the check, the Shopify preset fixes what no model should have to think about:
+whole numbers stored as floats (`14.0`, which pandas makes when one cell is empty) go back
+to integers, and Python bools become `true`/`false`.
+
+### SQLite output
+
+Any `-o something.sql`, with or without a preset, writes one script: a `CREATE TABLE`
+named after the file, then the rows as `INSERT`s in a single transaction.
+
+```bash
+schema-engine run orders.csv "Tidy it up" --preset sqlite -o orders.sql
+sqlite3 shop.db < orders.sql
+```
+
+Whole numbers and bools become `INTEGER` columns (bools as 0/1), decimals `REAL`, and the
+rest `TEXT`. SQLite has no date type, so dates are stored as ISO 8601 text
+(`2024-03-15`, or `2024-03-15 10:30:00` when a column has times), which SQLite's date
+functions read. SQLite treats `Name` and `name` as the same column, so such output fails
+with a clear error.
 
 The Shopify column list comes from Shopify's help pages, checked on 4 November 2026.
 Shopify still accepts its older headers, but the preset only writes the current ones.
@@ -178,7 +197,7 @@ the request fails and 2 when the configuration is incomplete.
 
 | Module | Job |
 | --- | --- |
-| `io.py` | Loads CSV/XLSX without "fixing" anything (headers and text kept as they are); writes CSV, TSV or XLSX |
+| `io.py` | Loads CSV/XLSX without "fixing" anything (headers and text kept as they are); writes CSV, TSV, XLSX or a SQLite script |
 | `profile.py`, `privacy.py` | Builds the column profile under the chosen privacy mode. This is all the model ever sees about the data |
 | `prompt.py` | The rules the model must follow, pulling the code out of its reply, and the repair message after a failure |
 | `providers/` | One interface, two clients: Ollama and OpenAI-compatible APIs. Retries rate limits and server errors |
@@ -190,6 +209,33 @@ the request fails and 2 when the configuration is incomplete.
 
 Cost stays flat as files grow: the prompt depends on the number of columns, never on the
 number of rows, and a saved transform can be reused for free with `apply`.
+
+## Tried on real models
+
+On 4 November 2026 the engine ran on Ollama 0.40.14 (laptop GPU, 8 GB) with `llama3.1`
+(8B, the default) and `qwen2.5-coder:7b`, against the dirty sample and a 5-row product
+list, with and without both presets.
+
+The engine side worked: requests, token counts, errors and preset problems going back to
+the model, and the retries. The models were the weak part. About 20 runs, most with 3
+tries, gave one transform that passed (llama3.1, Shopify preset, first try), and that one
+still left out the price column. Typical mistakes were pandas 1.x calls that pandas 3
+removed (`applymap`, `DataFrame.append`), a list passed as one date format, and columns
+picked by names that don't exist.
+
+Three fixes came out of it:
+
+- A transform that returns dates outside 1677-2262 no longer crashes `run`. The error
+  goes back to the model.
+- When headers are blank or repeated, the prompt names their exact positions
+  (`df.iloc[:, 4]`). That stopped the `'DataFrame' object has no attribute 'str'` error
+  that kept coming back in the first runs.
+- The Shopify preset turns whole-number floats back into integers itself, after a run
+  where the only problems left were whole numbers written as `14.0`.
+
+For real work, use a bigger model, for example `groq` with `llama-3.3-70b-versatile`.
+Small local models are fine for trying the tool on data that must stay on your machine,
+but expect to edit the saved transform.
 
 ## Development
 

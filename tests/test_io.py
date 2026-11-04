@@ -1,7 +1,12 @@
+import sqlite3
+from contextlib import closing
+from datetime import date, datetime
+from decimal import Decimal
+
 import pandas as pd
 import pytest
 
-from schema_engine.io import UnsupportedFormatError, load_dataset, save_dataset
+from schema_engine.io import UnsupportedFormatError, load_dataset, save_dataset, sqlite_script
 from schema_engine.samples import write_samples
 
 
@@ -74,3 +79,48 @@ def test_save_round_trip(tmp_path, name):
 def test_save_unsupported(tmp_path):
     with pytest.raises(UnsupportedFormatError, match=r"'\.json'"):
         save_dataset(pd.DataFrame({"a": [1]}), tmp_path / "out.json")
+
+
+def test_sql_script_loads_into_sqlite(tmp_path):
+    df = pd.DataFrame(
+        {
+            "id": pd.array([1, None], dtype="Int64"),
+            "price": [9.99, float("inf")],
+            "ok": [True, False],
+            "day": pd.to_datetime(["2024-03-15", None]),
+            "at": [pd.Timestamp("2024-03-15 10:30"), pd.Timestamp("2024-03-16")],
+            'na"me': ["it's\nfine", None],
+            "when": [date(2024, 1, 2), datetime(2024, 1, 2, 3, 4)],
+            "big": [2**70, 5],
+            "misc": [Decimal("1.10"), [1, 2]],
+            "odd": [b"\x00\xff", "a\x00b"],
+            "low": [-float("inf"), 1e-05],
+        }
+    )
+    path = tmp_path / "nested" / "my orders.sql"
+    save_dataset(df, path)
+    script = path.read_text(encoding="utf-8")
+    # Older SQLite would dump infinity as Inf, which doesn't load.
+    assert "Inf" not in script
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.executescript(script)
+        ddl = db.execute("SELECT sql FROM sqlite_master").fetchone()[0]
+        rows = db.execute('SELECT * FROM "my orders"').fetchall()
+    types = ["INTEGER", "REAL", "INTEGER"] + ["TEXT"] * 7 + ["REAL"]
+    names = ["id", "price", "ok", "day", "at", 'na""me', "when", "big", "misc", "odd", "low"]
+    columns = ",\n".join(f'  "{n}" {t}' for n, t in zip(names, types, strict=True))
+    assert ddl == f'CREATE TABLE "my orders" (\n{columns}\n)'
+    first = (1, 9.99, 1, "2024-03-15", "2024-03-15 10:30:00", "it's\nfine", "2024-01-02")
+    second = (None, float("inf"), 0, None, "2024-03-16 00:00:00", None, "2024-01-02 03:04:00")
+    assert rows == [
+        (*first, str(2**70), "1.10", b"\x00\xff", -float("inf")),
+        (*second, "5", "[1, 2]", "a\x00b", 1e-05),
+    ]
+
+
+def test_sql_names_that_clash_in_sqlite(tmp_path):
+    path = tmp_path / "t.sql"
+    with pytest.raises(ValueError, match="duplicate column name"):
+        save_dataset(pd.DataFrame({"Name": [1], "name": [2]}), path)
+    assert not path.exists()
+    assert "CREATE TABLE" in sqlite_script(pd.DataFrame({"a": []}), "empty")

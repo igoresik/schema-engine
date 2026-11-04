@@ -165,6 +165,27 @@ def _rows(mask: pd.Series) -> str:
     return f"row{'s' if len(rows) > 1 else ''} {shown}{more}"
 
 
+SQLITE_RULES = """\
+The output becomes a SQLite table.
+- Column names: lowercase letters, digits and _, not starting with a digit \
+(Order Date -> order_date). Avoid SQL keywords such as order or group.
+- Give every column one type: whole numbers as int (nullable Int64 when some are missing), \
+decimals as float, yes/no values as bool, dates parsed with pd.to_datetime, the rest as text.
+- Leave unknown cells empty (None), never a placeholder like N/A.
+"""
+
+_SQL_NAME_RE = re.compile(r"[a-z_][a-z0-9_]*")
+
+
+def check_sqlite(df: pd.DataFrame) -> list[str]:
+    return [
+        f"'{c}' must be snake_case: lowercase letters, digits and _, not starting with a digit"
+        for c in map(str, df.columns)
+        if not _SQL_NAME_RE.fullmatch(c)
+    ]
+
+
 EXPORT_PRESETS = {
     "shopify": ExportPreset("shopify", ".csv", SHOPIFY_RULES, check_shopify, finish_shopify),
+    "sqlite": ExportPreset("sqlite", ".sql", SQLITE_RULES, check_sqlite, lambda df: df),
 }

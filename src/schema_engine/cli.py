@@ -200,7 +200,7 @@ def run(
         _fail(f"No working transform after {len(result.attempts)} attempts. Last error:\n{last}")
     save.parent.mkdir(parents=True, exist_ok=True)
     save.write_text(_script(result, path, save, instruction, settings, target), encoding="utf-8")
-    save_dataset(result.output, output)
+    _save(result.output, output, saved=save)
     typer.echo(f"{len(result.output)} rows -> {output}")
     typer.echo(f"transform -> {save}")
 
@@ -228,8 +228,16 @@ def apply(
     cleaned, problems = target.fit(result.output) if target else (result.output, [])
     if target and problems:
         _fail(preset_error(target.name, problems, cleaned.columns, lambda text: text))
-    save_dataset(cleaned, output)
+    _save(cleaned, output)
     typer.echo(f"{len(cleaned)} rows -> {output}")
+
+
+def _save(df: pd.DataFrame, output: Path, *, saved: Path | None = None) -> None:
+    try:
+        save_dataset(df, output)
+    except ValueError as exc:
+        # e.g. SQLite sees "Name" and "name" as the same column.
+        _fail(f"{exc}\ntransform -> {saved}" if saved else str(exc))
 
 
 def _load(path: Path, sheet: str) -> pd.DataFrame:
@@ -265,7 +273,7 @@ def _check_writable(output: Path, target: ExportPreset | None = None) -> None:
     if target and suffix != target.suffix:
         _fail(f"The {target.name} preset writes {target.suffix} files, not '{suffix}'.", code=2)
     if suffix not in WRITE_SUFFIXES:
-        _fail(f"Can't write '{output.suffix}' files. Use .csv, .tsv or .xlsx.", code=2)
+        _fail(f"Can't write '{output.suffix}' files. Use .csv, .tsv, .xlsx or .sql.", code=2)
 
 
 def _last_line(error: str) -> str:

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from schema_engine.presets import EXPORT_PRESETS, SHOPIFY_COLUMNS, check_shopify
+from schema_engine.presets import EXPORT_PRESETS, SHOPIFY_COLUMNS, check_shopify, check_sqlite
 
 
 def shopify_rows(**overrides):
@@ -112,3 +112,13 @@ def test_fit_fixes_whole_floats_and_bools_first():
     # 120.5 isn't whole, so the column stays as it was and the check reports it.
     assert problems == ["'Weight value (grams)' must be a whole number of grams (rows 1, 3)"]
     assert df["Charge tax"].tolist() == [True, False, True]
+
+
+def test_sqlite_names():
+    df = pd.DataFrame(columns=["order_id", "_x1", "Order Date", "1st", "émail"])
+    rule = "must be snake_case: lowercase letters, digits and _, not starting with a digit"
+    assert check_sqlite(df) == [f"'{name}' {rule}" for name in ("Order Date", "1st", "émail")]
+    preset = EXPORT_PRESETS["sqlite"]
+    assert preset.suffix == ".sql"
+    assert preset.fit(df)[0] is df
+    assert "order_date" in preset.rules

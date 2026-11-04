@@ -12,11 +12,14 @@ Agreed 2026-11-03. Each step lands as its own pull request.
 3. **Code generation, sandbox, self-healing** (done, PR #3). Constrained prompt and code extraction;
    generated `transform(df)` runs in a subprocess with a timeout, import allowlist and no
    network. Tracebacks go back to the model for up to N retries. Token usage logged per run.
-4. **Docs and polish** (this step). Architecture diagram and module map, version 0.2.0.
-   Still open: a demo run on a real model (Ollama or a key) and a coverage badge, which
-   needs the repo to be public or a coverage service.
+4. **Docs and polish** (done, PR #4). Architecture diagram and module map, version 0.2.0.
+   Real local models tried on 2026-11-04 (see the README). Still open: a coverage badge,
+   which needs the repo to be public or a coverage service.
+5. **Export presets** (done, version 0.2.1). `--preset shopify` (Shopify product CSV) and
+   `--preset sqlite`, plus `.sql` output: a SQLite script with `CREATE TABLE` and the rows.
 
-Later: export presets (Shopify product CSV, SQLite `CREATE TABLE` DDL), optional FastAPI wrapper.
+Later: a run on a bigger model (Groq key), optional FastAPI wrapper. Shopify market,
+metafield and packed-dimension columns if a real import needs them.
 
 ## Constraints
 
