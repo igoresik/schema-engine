@@ -149,7 +149,12 @@ def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> Sand
             return SandboxResult(None, f"TimeoutError: transform ran longer than {timeout:g}s")
         if proc.returncode == 0:
             text = (work / "output.json").read_text(encoding="utf-8")
-            return SandboxResult(pd.read_json(StringIO(text), orient="table"))
+            try:
+                return SandboxResult(pd.read_json(StringIO(text), orient="table"))
+            except (ValueError, OverflowError) as exc:
+                # Read back as nanoseconds, so dates outside 1677-2262 fail here.
+                error = f"{type(exc).__name__}: the output can't be read back: {exc}"
+                return SandboxResult(None, error[-ERROR_LIMIT:])
         error_file = work / "error.txt"
         if error_file.exists():
             error = error_file.read_text(encoding="utf-8")
