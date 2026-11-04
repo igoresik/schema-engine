@@ -57,7 +57,7 @@ token count is printed as it happens, plus a total at the end.
 When a try works, `run` writes two files next to the input:
 
 - `NAME_clean.csv` (or `.tsv` / `.xlsx`, matching the input): the cleaned data. Change
-  it with `-o`.
+  it with `-o`, which also takes `.sql` (see [SQLite output](#sqlite-output)).
 - `NAME_transform.py`: the generated code, with a header saying which model wrote it and
   how many tokens it took. Change it with `--save`.
 
@@ -86,10 +86,27 @@ schema-engine apply products_transform.py next_month.xlsx --preset shopify
 | Preset | Writes | Checks |
 | --- | --- | --- |
 | `shopify` | `NAME_clean.csv` for Shopify's product import | Only Shopify's current column names (`URL handle`, not the old `Handle`); Title and URL handle present; handles in lowercase letters, numbers and dashes; true/false, status, price and whole-number columns in Shopify's format |
+| `sqlite` | `NAME_clean.sql`, a SQLite script | Column names in snake_case (`order_date`). The model is also told to avoid SQL keywords and give each column one real type |
 
-Before the check, a preset fixes what no model should have to think about: whole numbers
-stored as floats (`14.0`, which pandas makes when one cell is empty) go back to integers,
-and Python bools become `true`/`false`.
+Before the check, the Shopify preset fixes what no model should have to think about:
+whole numbers stored as floats (`14.0`, which pandas makes when one cell is empty) go back
+to integers, and Python bools become `true`/`false`.
+
+### SQLite output
+
+Any `-o something.sql`, with or without a preset, writes one script: a `CREATE TABLE`
+named after the file, then the rows as `INSERT`s in a single transaction.
+
+```bash
+schema-engine run orders.csv "Tidy it up" --preset sqlite -o orders.sql
+sqlite3 shop.db < orders.sql
+```
+
+Whole numbers and bools become `INTEGER` columns (bools as 0/1), decimals `REAL`, and the
+rest `TEXT`. SQLite has no date type, so dates are stored as ISO 8601 text
+(`2024-03-15`, or `2024-03-15 10:30:00` when a column has times), which SQLite's date
+functions read. SQLite treats `Name` and `name` as the same column, so such output fails
+with a clear error.
 
 The Shopify column list comes from Shopify's help pages, checked on 4 November 2026.
 Shopify still accepts its older headers, but the preset only writes the current ones.
@@ -178,7 +195,7 @@ the request fails and 2 when the configuration is incomplete.
 
 | Module | Job |
 | --- | --- |
-| `io.py` | Loads CSV/XLSX without "fixing" anything (headers and text kept as they are); writes CSV, TSV or XLSX |
+| `io.py` | Loads CSV/XLSX without "fixing" anything (headers and text kept as they are); writes CSV, TSV, XLSX or a SQLite script |
 | `profile.py`, `privacy.py` | Builds the column profile under the chosen privacy mode. This is all the model ever sees about the data |
 | `prompt.py` | The rules the model must follow, pulling the code out of its reply, and the repair message after a failure |
 | `providers/` | One interface, two clients: Ollama and OpenAI-compatible APIs. Retries rate limits and server errors |
