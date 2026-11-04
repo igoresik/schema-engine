@@ -16,6 +16,12 @@ def test_messages_carry_profile_and_task(dirty_df):
     assert "sample" not in json.loads(payload)
 
 
+def test_preset_rules_follow_the_task(dirty_df):
+    profile = build_profile(dirty_df, source="orders.csv", privacy_mode=PrivacyMode.NONE)
+    _, user = build_messages(profile, "Tidy up", "Only these columns.\n")
+    assert user.content.startswith("Task: Tidy up\n\nOnly these columns.\n\nData profile (JSON):\n")
+
+
 def test_system_prompt_lists_the_rules():
     assert "pandas, re, string, typing, unicodedata" in SYSTEM_PROMPT
     assert "n/a" in SYSTEM_PROMPT
