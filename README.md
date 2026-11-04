@@ -72,6 +72,30 @@ schema-engine apply samples/dirty_orders_transform.py next_month.csv -o next_mon
 hand-written transform for the sample data, so you can try `apply` before setting up a
 provider.
 
+## Export presets
+
+`--preset` tells the model the target format and checks what comes out. When the output
+doesn't fit, the problems go back to the model like any other error, so it gets another
+try. Problems name columns and row numbers, never cell values.
+
+```bash
+schema-engine run products.xlsx "Make this a Shopify import, Active means published" --preset shopify
+schema-engine apply products_transform.py next_month.xlsx --preset shopify
+```
+
+| Preset | Writes | Checks |
+| --- | --- | --- |
+| `shopify` | `NAME_clean.csv` for Shopify's product import | Only Shopify's current column names (`URL handle`, not the old `Handle`); Title and URL handle present; handles in lowercase letters, numbers and dashes; true/false, status, price and whole-number columns in Shopify's format |
+
+Before the check, a preset fixes what no model should have to think about: whole numbers
+stored as floats (`14.0`, which pandas makes when one cell is empty) go back to integers,
+and Python bools become `true`/`false`.
+
+The Shopify column list comes from Shopify's help pages, checked on 4 November 2026.
+Shopify still accepts its older headers, but the preset only writes the current ones.
+Market columns (`Price / International`), metafields and packed dimensions aren't
+supported yet.
+
 ## Sandbox
 
 Generated code is never run in the engine's own process.
@@ -160,6 +184,7 @@ the request fails and 2 when the configuration is incomplete.
 | `providers/` | One interface, two clients: Ollama and OpenAI-compatible APIs. Retries rate limits and server errors |
 | `config.py` | Reads settings in a fixed order and keeps API keys out of logs |
 | `sandbox.py`, `_runner.py` | Static check, the separate process that runs the code, and the output checks |
+| `presets.py` | Export presets: format rules for the model, safe fixes and the output check |
 | `engine.py` | The loop: ask, run, send the error back, stop on success or after N tries |
 | `cli.py` | `profile`, `samples`, `test-connection`, `run`, `apply` |
 
