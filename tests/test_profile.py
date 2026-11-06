@@ -3,7 +3,7 @@ import json
 import pandas as pd
 
 from schema_engine.privacy import PrivacyMode
-from schema_engine.profile import CLASSIFY_LIMIT, build_profile
+from schema_engine.profile import CLASSIFY_LIMIT, SHAPE_LIMIT, build_profile
 from schema_engine.samples import generate_dirty_dataframe
 
 
@@ -107,3 +107,20 @@ def test_empty_dataframe():
     assert p.row_count == 0
     assert p.columns == []
     assert p.duplicate_rows == 0
+
+
+def test_value_shapes_list_each_format_once():
+    df = pd.DataFrame(
+        {
+            "id": ["A-1", "A-2", "A-3", "A-4", "A-5"],
+            "price": ["$1.50", "$12.00", "2 USD", "-", None],
+        }
+    )
+    # $1.50 and $12.00 differ only in length, "-" is a placeholder, and one format gets none.
+    assert [c.value_shapes for c in build_profile(df).columns] == [[], ["$9.99", "9 USD"]]
+    raw = build_profile(df, privacy_mode=PrivacyMode.RAW)
+    assert raw.columns[1].value_shapes == ["$9.99", "9 USD"]
+    none = build_profile(df, privacy_mode=PrivacyMode.NONE)
+    assert all(not c.value_shapes for c in none.columns)
+    many = pd.DataFrame({"x": [f"1{sep}2" for sep in "-/.:;,_+=#@!%&*"]})
+    assert len(build_profile(many).columns[0].value_shapes) == SHAPE_LIMIT
