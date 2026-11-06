@@ -37,3 +37,31 @@ jobs:
           schema-engine apply examples/clean_orders.py samples/dirty_orders.csv -o samples/clean.csv
           schema-engine apply examples/clean_orders.py samples/dirty_orders.csv -o samples/clean.sql
           python -c "import sqlite3; sqlite3.connect(':memory:').executescript(open('samples/clean.sql').read())"
+      - name: Keep coverage report
+        if: github.ref == 'refs/heads/main' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  coverage-badge:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage
+      - name: Push badge to the badges branch
+        run: |
+          python .github/scripts/coverage_badge.py coverage.xml "$RUNNER_TEMP/coverage.json"
+          git fetch origin badges || true
+          git switch badges 2>/dev/null || git switch --orphan badges
+          cp "$RUNNER_TEMP/coverage.json" coverage.json
+          git add coverage.json
+          git diff --cached --quiet && exit 0
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "coverage badge"
+          git push origin badges
