@@ -158,7 +158,7 @@ proxy in between.
 | --- | --- | --- |
 | `ollama` (default) | `llama3.1` | None, runs locally |
 | `openai` | `gpt-6-luna` | `OPENAI_API_KEY` |
-| `groq` | `llama-3.3-70b-versatile` | `GROQ_API_KEY` |
+| `groq` | `openai/gpt-oss-120b` | `GROQ_API_KEY` |
 
 Settings are resolved in this order, first match wins:
 
@@ -174,7 +174,7 @@ Settings are resolved in this order, first match wins:
 {
   "provider": "groq",
   "providers": {
-    "groq": { "api_key": "gsk_...", "model": "llama-3.3-70b-versatile" },
+    "groq": { "api_key": "gsk_...", "model": "openai/gpt-oss-120b" },
     "ollama": { "base_url": "http://localhost:11434" }
   },
   "timeout": 60
@@ -233,7 +233,7 @@ Three fixes came out of it:
 - The Shopify preset turns whole-number floats back into integers itself, after a run
   where the only problems left were whole numbers written as `14.0`.
 
-For real work, use a bigger model, for example `groq` with `llama-3.3-70b-versatile`.
+For real work, use a bigger model, for example `groq` with `openai/gpt-oss-120b`.
 Small local models are fine for trying the tool on data that must stay on your machine,
 but expect to edit the saved transform.
 

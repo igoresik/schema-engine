@@ -45,7 +45,7 @@ def test_presets_for_cloud_providers(tmp_path):
     )
     assert (groq.provider, groq.model, groq.api_key) == (
         "groq",
-        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-120b",
         "gsk-g",
     )
 
