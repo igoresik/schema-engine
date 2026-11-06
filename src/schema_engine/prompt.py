@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+import pandas as pd
+
 from schema_engine.privacy import NULL_TOKENS
 from schema_engine.profile import DatasetProfile
 from schema_engine.providers import Message
@@ -27,13 +29,16 @@ the mixed formats the profile reports.
 - Columns are listed in table order. Names can be blank or repeated, so select by \
 position with df.iloc[:, i] when a name is not unique.
 - Output column names must be unique, non-empty strings.
+- The code runs on pandas {pd.__version__}. Avoid old APIs it removed or deprecated: \
+to_datetime(infer_datetime_format=...), DataFrame.applymap (use DataFrame.map) and \
+DataFrame.append (use pd.concat).
 """
 
 
 def build_messages(profile: DatasetProfile, instruction: str, rules: str = "") -> list[Message]:
     """``rules`` are a preset's output format, placed after the task."""
     task = f"Task: {instruction.strip()}"
-    for extra in (rules.strip(), _position_note(profile)):
+    for extra in (rules.strip(), _position_note(profile), _date_note(profile)):
         if extra:
             task += f"\n\n{extra}"
     user = f"{task}\n\nData profile (JSON):\n{profile.to_json()}"
@@ -51,7 +56,19 @@ def _position_note(profile: DatasetProfile) -> str:
         return ""
     return (
         "Some column names are blank or repeat, so df[name] can't pick one column. "
-        f"Select these by position: {', '.join(risky)}."
+        f"Select these by position: {', '.join(risky)}. To replace one, use "
+        "df.isetitem(i, values): df.iloc[:, i] = values can't change the column's dtype."
+    )
+
+
+def _date_note(profile: DatasetProfile) -> str:
+    # gpt-oss-120b passed infer_datetime_format on every first try despite the system rule.
+    dates = [repr(c.name) for c in profile.columns if c.date_order]
+    if not dates:
+        return ""
+    return (
+        f"Dates in {', '.join(dates)}: pd.to_datetime in pandas {pd.__version__} has no "
+        'infer_datetime_format argument. Use format="mixed" for mixed formats.'
     )
 
 
