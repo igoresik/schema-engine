@@ -17,8 +17,10 @@ Agreed 2026-11-03. Each step lands as its own pull request.
    which needs the repo to be public or a coverage service.
 5. **Export presets** (done, version 0.2.1). `--preset shopify` (Shopify product CSV) and
    `--preset sqlite`, plus `.sql` output: a SQLite script with `CREATE TABLE` and the rows.
-
-Bigger model run done on 2026-11-06 (Groq, `openai/gpt-oss-120b`, see [real-runs.md](real-runs.md)).
+6. **Bigger model and pandas 3 notes** (done, version 0.2.2). Groq's default is now
+   `openai/gpt-oss-120b`, since Groq removed `llama-3.3-70b-versatile`. The prompt names
+   the file's date columns and says how to replace a column by position under pandas 3.
+   Tried on 2026-11-06, see [real-runs.md](real-runs.md).
 
 Later: optional FastAPI wrapper. Shopify market, metafield and packed-dimension columns if
 a real import needs them.
