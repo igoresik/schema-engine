@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
@@ -31,6 +32,12 @@ RAW_TEXT_LIMIT = 64
 DOMINANT_SHARE = 0.6
 """A column gets a single semantic type when one pattern covers this share."""
 
+SHAPE_LIMIT = 8
+"""Most common value formats listed per column (masked or raw modes)."""
+
+SHAPE_TEXT_LIMIT = 32
+"""Each listed format is cut to this many characters."""
+
 
 @dataclass(frozen=True)
 class ColumnProfile:
@@ -44,6 +51,8 @@ class ColumnProfile:
     placeholder_nulls: int = 0
     untrimmed_values: int = 0
     date_order: str | None = None
+    value_shapes: list[str] = field(default_factory=list)
+    """Masked examples of each format found, most common first. Empty in none mode."""
     header_issues: list[str] = field(default_factory=list)
 
 
@@ -86,7 +95,8 @@ def build_profile(
 ) -> DatasetProfile:
     """Summarise ``df`` into metadata that is safe to share under ``privacy_mode``."""
     privacy_mode = PrivacyMode(privacy_mode)
-    columns = [_profile_column(df, i) for i in range(df.shape[1])]
+    shapes = privacy_mode is not PrivacyMode.NONE
+    columns = [_profile_column(df, i, shapes=shapes) for i in range(df.shape[1])]
     return DatasetProfile(
         source=Path(source).name,  # never leak local directory structure
         row_count=int(df.shape[0]),
@@ -98,7 +108,7 @@ def build_profile(
     )
 
 
-def _profile_column(df: pd.DataFrame, position: int) -> ColumnProfile:
+def _profile_column(df: pd.DataFrame, position: int, *, shapes: bool = True) -> ColumnProfile:
     name = str(df.columns[position])
     series = df.iloc[:, position]
     total = len(series)
@@ -106,7 +116,8 @@ def _profile_column(df: pd.DataFrame, position: int) -> ColumnProfile:
     non_null = series[~null_mask]
     probe = _probe(non_null)
 
-    labels = Counter(classify_value(v) for v in probe)
+    kinds = [classify_value(v) for v in probe]
+    labels = Counter(kinds)
     placeholder_share = labels.pop("null_token", 0)
     labels.pop("null", None)
     patterns = _shares(labels)
@@ -136,8 +147,29 @@ def _profile_column(df: pd.DataFrame, position: int) -> ColumnProfile:
         placeholder_nulls=placeholders,
         untrimmed_values=round(untrimmed * scale),
         date_order=order,
+        value_shapes=_value_shapes(probe, kinds) if shapes else [],
         header_issues=_header_issues(df.columns, position),
     )
+
+
+def _value_shapes(probe: list[Any], kinds: list[str]) -> list[str]:
+    """One masked example per format, e.g. ``$9,999.99`` and ``9999.99 USD``.
+
+    Values whose masks differ only in length (``$99.99``, ``$999.99``) count as one
+    format. A column with a single format gets none: the sample already shows it.
+    """
+    counts: Counter[str] = Counter()
+    examples: dict[str, str] = {}
+    for value, kind in zip(probe, kinds, strict=True):
+        if kind in ("null", "null_token"):
+            continue
+        masked = str(mask_value(_py(value)))
+        key = re.sub(r"(.)\1+", r"\1", masked)
+        counts[key] += 1
+        examples.setdefault(key, masked[:SHAPE_TEXT_LIMIT])
+    if len(counts) < 2:
+        return []
+    return [examples[key] for key, _ in counts.most_common(SHAPE_LIMIT)]
 
 
 def _probe(non_null: pd.Series) -> list[Any]:

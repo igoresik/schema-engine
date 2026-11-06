@@ -71,11 +71,57 @@ cell.
 These are small samples. The model is not fully repeatable even at temperature 0, so a
 run can go better or worse than these.
 
+### `apply` on a new file
+
+The transforms saved by 0.2.2 ran again with `apply` on a new 200-row sample
+(`schema-engine samples --seed 42 --rows 200`). On its own file, the README example's
+transform gave byte for byte the same output as the run. On the new file every transform
+finished without an error, but the README example's one lost 135 of 176 dates and 99 of
+178 prices:
+
+- Prices: the code removed only `$` and `,`, so every `... USD` price became blank.
+  That was already 21 of 50 rows on the original file, not the single row first noticed.
+- Dates: `pd.to_datetime(col, errors="coerce")` with no format guesses one format from
+  the first real value and blanks every date written another way. The original file happened to start with a date
+  pandas couldn't guess from, so it read each value on its own. The new file starts with
+  `09/12/2024`.
+
+The model never saw `USD`: the profile said the column was 66% currency and 34% number,
+and none of the 3 sample rows had it.
+
+## 6 November 2026: value shapes and the lost-values check (version 0.2.3)
+
+Two changes:
+
+- The profile lists up to 8 masked formats per column (`9999.99 USD`, `€9 999.99`,
+  `Month 99, 9999`), counted over all rows. Not in `none` mode.
+- After each try, parsed columns are compared with the input. Values that went blank go
+  back to the model, and `apply` warns about them.
+
+The first version of the check scaled the expected count by the row count. That raised
+a false alarm (1 of 188 prices) when the 10 duplicate rows the code dropped all had
+prices. It now counts every dropped row as one that held a value, so the count is a
+lower bound and dropping rows never looks like a loss.
+
+Runs on `openai/gpt-oss-120b`, then `apply` on the new 200-row file:
+
+| Run | Tries | Lost on the new file |
+| --- | --- | --- |
+| CSV, README example task | 2 (first crashed on `df.str`) | none |
+| CSV, `--preset sqlite` | 1 | none |
+| XLSX | 2 (first used a column name that doesn't exist) | none |
+
+"None" was counted cell by cell against the input: 176 dates, 178 prices and 179 emails
+in each output. The SQLite run renamed `Order Date` to `order_dt`, which the check can't
+match, so that column was only covered by the manual count.
+
 ## What to take from it
 
 - Use a big model for real work. Small local models are fine for trying the tool on data
   that must stay on your machine, but expect to edit the saved transform.
 - Notes next to the task, naming exact columns, work better than general rules in the
   system prompt.
-- A transform that passes can still be wrong. Read the saved transform and check the
-  output before you import it anywhere.
+- Tell the model every format a column has. It can't handle a format it never sees.
+- A transform that passes can still be wrong, and one that works this month can fail on
+  next month's file. Read the saved transform and check the output before you import it
+  anywhere.

@@ -294,3 +294,34 @@ def test_write_errors_after_the_model_keep_the_transform(clean_env, monkeypatch,
     )
     assert result.exit_code == 1
     assert "transform -> " not in result.stderr
+
+
+LOSSY = """```python
+import pandas as pd
+
+
+def transform(df):
+    out = df.iloc[:, [0, 5]].copy()
+    out.columns = ["order_id", "Unit Price"]
+    out["Unit Price"] = pd.to_numeric(out["Unit Price"], errors="coerce")
+    return out
+```"""
+
+
+def test_run_keeps_a_lossy_try_with_a_warning(clean_env, monkeypatch, orders):
+    use_fake(monkeypatch, FakeProvider([LOSSY]))
+    result = runner.invoke(app, ["run", str(orders), "parse prices", "--attempts", "1"])
+    assert result.exit_code == 0, result.output
+    assert "No try kept every value, so attempt 1 is kept." in result.stderr
+    assert "'Unit Price': " in result.stderr
+    assert orders.with_name("dirty_orders_clean.csv").exists()
+
+
+def test_apply_warns_when_values_go_blank(clean_env, orders, tmp_path):
+    script = tmp_path / "prices.py"
+    script.write_text(LOSSY.split("\n", 1)[1].rsplit("```", 1)[0], encoding="utf-8")
+    result = runner.invoke(app, ["apply", str(script), str(orders)])
+    assert result.exit_code == 0, result.output
+    assert "warning: values became blank" in result.stderr
+    assert "'Unit Price': " in result.stderr
+    assert "may not handle every format in this file" in result.stderr
