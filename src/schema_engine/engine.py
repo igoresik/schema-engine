@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
+from pandas.api.types import is_bool, is_bool_dtype, is_datetime64_any_dtype, is_numeric_dtype
 
 from schema_engine.presets import ExportPreset
-from schema_engine.privacy import PrivacyMode, mask_string
+from schema_engine.privacy import NULL_TOKENS, PrivacyMode, mask_string
 from schema_engine.profile import build_profile
 from schema_engine.prompt import build_messages, extract_code, repair_message
 from schema_engine.providers import LLMProvider, Message, Usage
@@ -33,9 +35,21 @@ class Attempt:
 
 
 @dataclass(frozen=True)
+class Lost:
+    column: str
+    blanked: int
+    filled: int
+    """Cells with a real value in the input."""
+
+
+@dataclass(frozen=True)
 class CompileResult:
     attempts: list[Attempt]
     output: pd.DataFrame | None = None
+    lost: list[Lost] = field(default_factory=list)
+    """Set when no try kept every value, so the output came from the one that lost fewest."""
+    picked: int = -1
+    """Index of the attempt that made ``output``."""
 
     @property
     def ok(self) -> bool:
@@ -43,7 +57,7 @@ class CompileResult:
 
     @property
     def code(self) -> str | None:
-        return self.attempts[-1].code if self.attempts else None
+        return self.attempts[self.picked].code if self.attempts else None
 
     @property
     def usage(self) -> Usage:
@@ -65,7 +79,9 @@ def compile_transform(
 ) -> CompileResult:
     """Ask the model for ``transform(df)`` and run it, feeding errors back until it works.
 
-    With a preset, an output that fails its check counts as an error too.
+    With a preset, an output that fails its check counts as an error too. So do
+    values that parsing turned blank, but if every try loses some, the output that
+    lost fewest is kept, with ``lost`` set.
     Provider errors (bad key, endpoint down) are raised, not retried here.
     """
     privacy_mode = PrivacyMode(privacy_mode)
@@ -73,11 +89,12 @@ def compile_transform(
     base = build_messages(profile, instruction, preset.rules if preset else "")
     messages = base
     attempts: list[Attempt] = []
+    fallback: CompileResult | None = None
     for number in range(1, max_attempts + 1):
         completion = provider.complete(messages, max_tokens=MAX_TOKENS, temperature=temperature)
         code = extract_code(completion.text)
         result = run_transform(code, df, timeout=timeout)
-        output, problems = result.output, []
+        output, problems, lost = result.output, [], []
         if preset and output is not None:
             output, problems = preset.fit(output)
         error = None
@@ -86,15 +103,83 @@ def compile_transform(
         elif preset and problems:
             scrub = _scrubber(df, code, privacy_mode)
             error = preset_error(preset.name, problems, output.columns, scrub)
+        elif lost := lost_values(df, result.output):
+            error = lost_error(lost)
         attempt = Attempt(number, code, completion.usage, completion.latency_ms, error)
         attempts.append(attempt)
         if on_attempt:
             on_attempt(attempt)
         if error is None:
-            return CompileResult(attempts, output)
+            return CompileResult(attempts, output, picked=number - 1)
+        if lost and (fallback is None or _blanked(lost) < _blanked(fallback.lost)):
+            fallback = CompileResult(attempts, output, lost, number - 1)
         # Only the latest try goes back, so each retry costs about the same.
         messages = [*base, Message("assistant", completion.text), repair_message(error or "")]
+    if fallback:
+        return CompileResult(attempts, fallback.output, fallback.lost, fallback.picked)
     return CompileResult(attempts)
+
+
+def lost_values(before: pd.DataFrame, after: pd.DataFrame) -> list[Lost]:
+    """Output columns parsed to numbers, dates or bools that hold fewer values than before.
+
+    That's where to_numeric/to_datetime(errors="coerce") quietly blank what they can't
+    read. Text columns aren't checked, so a task that clears a column on purpose isn't
+    flagged. Columns are matched by name, ignoring case and punctuation (``Unit Price``
+    and ``unit_price``); names that repeat, and renamed columns, are skipped.
+    Every dropped row is counted as one that held a value, so dropping duplicates or
+    filtering rows never looks like a loss. The count is a lower bound.
+    """
+    keys_in = [_key(c) for c in before.columns]
+    keys_out = [_key(c) for c in after.columns]
+    dropped = max(len(before) - len(after), 0)
+    lost = []
+    for position, key in enumerate(keys_in):
+        if not key or keys_in.count(key) != 1 or keys_out.count(key) != 1:
+            continue
+        out = after.iloc[:, keys_out.index(key)]
+        if not _parsed(out):
+            continue
+        filled = int(before.iloc[:, position].map(_has_value).sum())
+        blanked = filled - dropped - int(out.notna().sum())
+        if blanked > 0:
+            lost.append(Lost(str(before.columns[position]), blanked, filled))
+    return lost
+
+
+def lost_error(lost: list[Lost]) -> str:
+    """What goes back to the model. Counts and column names only, never values."""
+    lines = "\n".join(
+        f"- '{x.column}': {x.blanked} of {x.filled} values became blank" for x in lost
+    )
+    total, columns = _blanked(lost), len(lost)
+    return (
+        f"{lines}\nRead every format listed in the column's value_shapes. Only placeholder "
+        f"nulls should become blank.\n{total} value{'s' if total > 1 else ''} became blank "
+        f"in {columns} column{'s' if columns > 1 else ''}"
+    )
+
+
+def _blanked(lost: list[Lost]) -> int:
+    return sum(x.blanked for x in lost)
+
+
+def _key(name: object) -> str:
+    return re.sub(r"[^0-9a-z]+", "_", str(name).strip().lower()).strip("_")
+
+
+def _parsed(column: pd.Series) -> bool:
+    if is_numeric_dtype(column) or is_datetime64_any_dtype(column) or is_bool_dtype(column):
+        return True
+    values = column.dropna()
+    return len(values) > 0 and bool(values.map(is_bool).all())
+
+
+def _has_value(value: object) -> bool:
+    if isinstance(value, str):
+        text = value.strip().lower()
+        return bool(text) and text not in NULL_TOKENS
+    return pd.isna(value) is not True  # list cells make isna return an array
 
 
 def preset_error(

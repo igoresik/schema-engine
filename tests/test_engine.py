@@ -4,7 +4,9 @@ import pytest
 from schema_engine.engine import (
     MAX_TOKENS,
     CompileResult,
+    Lost,
     compile_transform,
+    lost_values,
     preset_error,
     scrub_error,
 )
@@ -175,3 +177,73 @@ def test_preset_error_lists_every_problem():
     assert preset_error("x", ["'a' bad", "b"], ["a"], lambda text: text) == (
         "- 'a' bad\n- b\nOutput doesn't fit the x format (2 problems)"
     )
+
+
+PRICES = pd.DataFrame({"id": ["a", "b", "c", "d"], "Unit Price": ["$1.50", "2 USD", "-", "3"]})
+
+
+def _prices(pattern):
+    return f"""```python
+import pandas as pd
+
+
+def transform(df):
+    out = df.copy()
+    out["Unit Price"] = pd.to_numeric(
+        out["Unit Price"].str.replace(r"{pattern}", "", regex=True), errors="coerce"
+    )
+    return out
+```"""
+
+
+LOSES_USD = _prices(r"\$")
+KEEPS_ALL = _prices(r"[^0-9.]")
+
+
+def test_values_that_go_blank_go_back_to_the_model():
+    fake = FakeProvider([LOSES_USD, KEEPS_ALL])
+    result = compile_transform(PRICES, "parse prices", fake)
+    assert result.ok and not result.lost and result.picked == 1
+    first = result.attempts[0].error
+    assert first.startswith("- 'Unit Price': 1 of 3 values became blank\n")
+    assert first.endswith("1 value became blank in 1 column")
+    assert "value_shapes" in fake.calls[1][-1].content
+    assert result.output["Unit Price"].tolist()[:2] == [1.5, 2.0]
+
+
+def test_the_try_that_lost_fewest_values_is_kept():
+    crash = "```python\ndef transform(df):\n    return df[['nope']]\n```"
+    fake = FakeProvider([LOSES_USD, crash])
+    result = compile_transform(PRICES, "parse prices", fake, max_attempts=2)
+    assert result.ok
+    assert result.lost == [Lost("Unit Price", 1, 3)]
+    assert result.picked == 0
+    assert result.code == result.attempts[0].code
+
+
+def test_lost_values_only_checks_parsed_columns_it_can_match():
+    before = pd.DataFrame(
+        {
+            "Unit Price": ["1", "2", "x", "4"],
+            "Note": ["a", "b", "c", "d"],
+            "When": ["2024-01-01"] * 4,
+            "In Stock?": ["Y", "n", "yes", "N/A"],
+        }
+    )
+    after = pd.DataFrame(
+        {
+            "unit_price": [1.0, 2.0, None, 4.0],  # "x" lost
+            "note": [None] * 4,  # text, so clearing it on purpose is fine
+            "date": [pd.NaT] * 4,  # renamed, so not matched
+            "in_stock": [True, None, True, None],  # "N/A" was a placeholder
+        }
+    )
+    assert lost_values(before, after) == [Lost("Unit Price", 1, 4), Lost("In Stock?", 1, 3)]
+    assert lost_values(before.iloc[:, :1], after.iloc[[0, 1], :1]) == []  # dropped rows
+    # Dropping only the filled rows (duplicates, a filter) isn't a loss either.
+    kept_blanks = pd.DataFrame({"n": [None, None]}, dtype=float)
+    assert lost_values(pd.DataFrame({"n": ["1", "2", "3", "", ""]}), kept_blanks) == []
+    twice = pd.DataFrame([["1", "x"]], columns=["n", "N"])
+    assert lost_values(twice, pd.DataFrame({"n": [None]})) == []
+    numbers = pd.DataFrame({"qty": [1.0, None, 3.0]})  # Excel cells come in as numbers
+    assert lost_values(numbers, pd.DataFrame({"qty": [1.0, None, None]})) == [Lost("qty", 1, 2)]

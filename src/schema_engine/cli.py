@@ -11,7 +11,14 @@ import typer
 
 from schema_engine import __version__
 from schema_engine.config import ConfigError, Settings, load_settings
-from schema_engine.engine import Attempt, CompileResult, compile_transform, preset_error
+from schema_engine.engine import (
+    Attempt,
+    CompileResult,
+    Lost,
+    compile_transform,
+    lost_values,
+    preset_error,
+)
 from schema_engine.io import (
     EXCEL_SUFFIXES,
     WRITE_SUFFIXES,
@@ -198,6 +205,8 @@ def run(
     if result.output is None:
         last = result.attempts[-1].error
         _fail(f"No working transform after {len(result.attempts)} attempts. Last error:\n{last}")
+    if result.lost:
+        _warn_lost(result.lost, f"No try kept every value, so attempt {result.picked + 1} is kept.")
     save.parent.mkdir(parents=True, exist_ok=True)
     save.write_text(_script(result, path, save, instruction, settings, target), encoding="utf-8")
     _save(result.output, output, saved=save)
@@ -228,8 +237,19 @@ def apply(
     cleaned, problems = target.fit(result.output) if target else (result.output, [])
     if target and problems:
         _fail(preset_error(target.name, problems, cleaned.columns, lambda text: text))
+    if lost := lost_values(df, result.output):
+        _warn_lost(lost, "The transform may not handle every format in this file.")
     _save(cleaned, output)
     typer.echo(f"{len(cleaned)} rows -> {output}")
+
+
+def _warn_lost(lost: list[Lost], why: str) -> None:
+    lines = "\n".join(f"  '{x.column}': {x.blanked} of {x.filled} values" for x in lost)
+    typer.secho(
+        f"warning: values became blank. {why}\n{lines}\nCheck the output before you use it.",
+        fg=typer.colors.YELLOW,
+        err=True,
+    )
 
 
 def _save(df: pd.DataFrame, output: Path, *, saved: Path | None = None) -> None:
