@@ -13,12 +13,14 @@ Agreed 2026-11-03. Each step lands as its own pull request.
    generated `transform(df)` runs in a subprocess with a timeout, import allowlist and no
    network. Tracebacks go back to the model for up to N retries. Token usage logged per run.
 4. **Docs and polish** (done, PR #4). Architecture diagram and module map, version 0.2.0.
-   Real local models tried on 2026-11-04 (see the README). Still open: a coverage badge,
+   Real local models tried on 2026-11-04 (see [real-runs.md](real-runs.md)). Still open: a coverage badge,
    which needs the repo to be public or a coverage service.
 5. **Export presets** (done, version 0.2.1). `--preset shopify` (Shopify product CSV) and
    `--preset sqlite`, plus `.sql` output: a SQLite script with `CREATE TABLE` and the rows.
-
-Bigger model run done on 2026-11-06 (Groq, `openai/gpt-oss-120b`, see the README).
+6. **Bigger model and pandas 3 notes** (done, version 0.2.2). Groq's default is now
+   `openai/gpt-oss-120b`, since Groq removed `llama-3.3-70b-versatile`. The prompt names
+   the file's date columns and says how to replace a column by position under pandas 3.
+   Tried on 2026-11-06, see [real-runs.md](real-runs.md).
 
 Later: optional FastAPI wrapper. Shopify market, metafield and packed-dimension columns if
 a real import needs them.
