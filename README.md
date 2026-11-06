@@ -24,8 +24,8 @@ opt in.
  └────────────────────────────────────────────────────┘
 ```
 
-Licensed MIT. Status: version 0.2.1, works end to end; small local models rarely write a
-working transform yet (see [Tried on real models](#tried-on-real-models)). See
+Licensed MIT. Status: version 0.2.1, works end to end. `gpt-oss-120b` on Groq passed 4 of
+5 real runs, small local models rarely do (see [Tried on real models](#tried-on-real-models)). See
 [docs/PLAN.md](docs/PLAN.md).
 
 ## Quick start
@@ -158,7 +158,7 @@ proxy in between.
 | --- | --- | --- |
 | `ollama` (default) | `llama3.1` | None, runs locally |
 | `openai` | `gpt-6-luna` | `OPENAI_API_KEY` |
-| `groq` | `llama-3.3-70b-versatile` | `GROQ_API_KEY` |
+| `groq` | `openai/gpt-oss-120b` | `GROQ_API_KEY` |
 
 Settings are resolved in this order, first match wins:
 
@@ -174,7 +174,7 @@ Settings are resolved in this order, first match wins:
 {
   "provider": "groq",
   "providers": {
-    "groq": { "api_key": "gsk_...", "model": "llama-3.3-70b-versatile" },
+    "groq": { "api_key": "gsk_...", "model": "openai/gpt-oss-120b" },
     "ollama": { "base_url": "http://localhost:11434" }
   },
   "timeout": 60
@@ -233,9 +233,26 @@ Three fixes came out of it:
 - The Shopify preset turns whole-number floats back into integers itself, after a run
   where the only problems left were whole numbers written as `14.0`.
 
-For real work, use a bigger model, for example `groq` with `llama-3.3-70b-versatile`.
+On 6 November 2026 it ran on Groq with `openai/gpt-oss-120b`: the dirty sample as CSV and
+XLSX, the CSV twice more with `--preset sqlite`, and a 5-row product list with
+`--preset shopify`. 4 of 5 runs passed, at 3,200 to 8,400 tokens each. The Shopify run
+passed on the first try and kept the price column. Every run on the orders sample failed
+its first try the same way, with `to_datetime(..., infer_datetime_format=True)`, an
+argument pandas 3 removed. Three runs fixed it on the second try. One SQLite run failed
+all 3 tries on the date column (13,452 tokens).
+
+A transform that runs is not always right. Reading the output showed:
+
+- The Shopify run rounded weights to whole kilograms before turning them into grams
+  (0.35 kg became 0 g).
+- One SQLite run dropped the email column.
+- Names and titles kept their original case, although the task asked to tidy them.
+- In the first CSV run, `Y` and `n` in the stock column became empty.
+
+For real work, use a bigger model, for example `groq` with `openai/gpt-oss-120b`.
 Small local models are fine for trying the tool on data that must stay on your machine,
-but expect to edit the saved transform.
+but expect to edit the saved transform. With any model, read the saved transform and check
+the output before you import it anywhere.
 
 ## Development
 
