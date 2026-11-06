@@ -18,8 +18,10 @@ Agreed 2026-11-03. Each step lands as its own pull request.
 5. **Export presets** (done, version 0.2.1). `--preset shopify` (Shopify product CSV) and
    `--preset sqlite`, plus `.sql` output: a SQLite script with `CREATE TABLE` and the rows.
 
-Later: a run on a bigger model (Groq key), optional FastAPI wrapper. Shopify market,
-metafield and packed-dimension columns if a real import needs them.
+Bigger model run done on 2026-11-06 (Groq, `openai/gpt-oss-120b`, see the README).
+
+Later: optional FastAPI wrapper. Shopify market, metafield and packed-dimension columns if
+a real import needs them.
 
 ## Constraints
 
