@@ -21,6 +21,9 @@ Agreed 2026-11-03. Each step lands as its own pull request.
    `openai/gpt-oss-120b`, since Groq removed `llama-3.3-70b-versatile`. The prompt names
    the file's date columns and says how to replace a column by position under pandas 3.
    Tried on 2026-11-06, see [real-runs.md](real-runs.md).
+7. **Value shapes and lost values** (done, version 0.2.3). The profile lists the formats
+   found in each column (masked). Values that parsing turned blank count as a failed try
+   in `run`, and `apply` warns about them.
 
 Later: optional FastAPI wrapper. Shopify market, metafield and packed-dimension columns if
 a real import needs them.

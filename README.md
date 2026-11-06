@@ -15,8 +15,8 @@ cleaned again for free, without the model.
   shape of your values (`$1,240.50` becomes `$9,999.99`).
 - **Cost doesn't grow with the file.** The prompt depends on the number of columns, not
   rows. A 50-row file and a 500,000-row file cost about the same.
-- **It fixes its own mistakes.** If the code crashes, the error goes back to the model
-  for another try.
+- **It fixes its own mistakes.** If the code crashes, or turns values it couldn't read
+  into blanks, the problem goes back to the model for another try.
 - **You get code, not a black box.** Every run saves a plain Python file you can read,
   edit and commit.
 - **Bring your own key.** Runs on Ollama (local, free), OpenAI or Groq.
@@ -34,8 +34,9 @@ cleaned again for free, without the model.
 
 ```console
 $ schema-engine run dirty_orders.csv "Title-case names, lowercase emails, parse dates and prices, make In Stock? true/false, drop duplicates" --provider groq
-attempt 1: ok (3748 tokens, 5388 ms)
-3748 tokens in total (1649 prompt, 2099 completion)
+attempt 1: failed, AttributeError: 'DataFrame' object has no attribute 'str'. Did you mean: 'std'? (3510 tokens, 4352 ms)
+attempt 2: ok (4115 tokens, 3502 ms)
+7625 tokens in total (4732 prompt, 2893 completion)
 ```
 
 The same rows afterwards:
@@ -45,11 +46,12 @@ The same rows afterwards:
 | Farah Petrov | 2024-07-21 | 75.28 | True |
 | Ivan Okafor | 2024-10-15 | 929.66 | False |
 | Jia Okafor | 2024-09-09 | *(empty)* | False |
-| Goran Sato | *(empty)* | *(empty)* | True |
+| Goran Sato | *(empty)* | 1436.72 | True |
 
-Mostly right, but `1436.72 USD` lost its price. That's real output from
-`openai/gpt-oss-120b`, and it's why the code is saved for you to check
-(see [How well it works](#how-well-it-works)).
+The first try crashed, the error went back to the model, and the second try worked.
+Across all 50 rows, no date or price was lost: `-` and blanks stay empty, and everything
+else was parsed. That's real output from `openai/gpt-oss-120b` on version 0.2.3. It isn't
+always this clean, so check the output (see [How well it works](#how-well-it-works)).
 
 ## Install
 
@@ -106,7 +108,7 @@ from.
 | `profile FILE` | Prints the exact JSON the model would get, plus a token estimate |
 | `test-connection` | Checks your provider and key with a one-token request |
 | `run FILE "TASK"` | Has the model write a transform, runs it and saves the data and the code |
-| `apply TRANSFORM FILE` | Runs a saved transform again. No model, no tokens |
+| `apply TRANSFORM FILE` | Runs a saved transform again, and warns if values went blank. No model, no tokens |
 
 Add `--help` to any command for all its options.
 
@@ -123,6 +125,32 @@ When a try works, `run` writes two files next to the input:
   with `-o`, which also takes `.sql` (see [SQLite output](#sqlite-output)).
 - `NAME_transform.py`: the generated code, with a header saying which model wrote it and
   how many tokens it took. Change it with `--save`.
+
+### Lost values
+
+A common silent mistake is code that can't read a format, like `1436.72 USD` or
+`21.07.24`, and quietly turns it into a blank. After each try, `run` compares the
+columns that were parsed into numbers, dates or true/false with the input. If cells that
+had a real value came out blank, that counts as a failed try and goes back to the model.
+Placeholders like `N/A` or `-` becoming blank is fine.
+
+If no try keeps every value, `run` keeps the one that lost fewest and prints a warning
+saying how many values each column lost. `apply` runs the same check on every new file
+and warns, since next month's export can hold a format the code never saw. Here a
+transform written under version 0.2.2 meets a new 200-row file:
+
+```console
+$ schema-engine apply dirty_orders_transform.py next_month.csv
+warning: values became blank. The transform may not handle every format in this file.
+  'Order Date': 134 of 185 values
+  'Unit Price': 99 of 188 values
+Check the output before you use it.
+200 rows -> next_month_clean.csv
+```
+
+The check matches columns by name, ignoring case and punctuation (`Unit Price` and
+`unit_price`). It can't see a column the code renamed, or a value that's filled but
+wrong (0.35 kg written as 0 g).
 
 [examples/clean_orders.py](examples/clean_orders.py) is a hand-written transform for the
 sample data, so you can try `apply` before setting up a provider.
@@ -181,7 +209,9 @@ with a clear error.
 Every mode also includes column hints worked out locally over all rows: the kind of
 value, blank and placeholder counts (`N/A`, `-`), untrimmed text, date order
 (`DMY`/`MDY`/`YMD`/`inconsistent`) and header problems (spaces, blank or repeated names).
-`schema-engine profile FILE -p MODE` shows exactly what gets sent.
+`masked` and `raw` also list up to 8 formats found in each column, masked the same way
+(`$9,999.99`, `9999.99 USD`, `DD.MM.YY`), so the model knows every format it has to read.
+`none` leaves them out. `schema-engine profile FILE -p MODE` shows exactly what gets sent.
 
 Error messages sent back to the model have cell values replaced too, so a failed try
 doesn't leak rows. This is best effort and matches values as plain text. `raw` mode sends
@@ -252,11 +282,20 @@ use it to run code you would never trust.
 | `llama3.1` 8B and `qwen2.5-coder:7b` (Ollama, laptop) | about 20 | 1 | 1 |
 | `openai/gpt-oss-120b` (Groq), version 0.2.1 | 5 | 4 | 1 |
 | `openai/gpt-oss-120b` (Groq), version 0.2.2 | 5 | 5 | 3 |
+| `openai/gpt-oss-120b` (Groq), version 0.2.3 | 3 | 3 | 1 |
 
-"Passed" means the code ran and the output passed the checks. It doesn't mean every
-value is right: runs also dropped a column, rounded weights to whole kilograms and lost
-prices written like `1436.72 USD`. Use a big model for real work, read the saved
-transform and check the output before you import it anywhere.
+Up to 0.2.2, "passed" meant the code ran and fit the preset. From 0.2.3 it also means
+no value went blank (see [Lost values](#lost-values)), which is a harder bar.
+
+The bigger change shows on a new file. Under 0.2.2, the transform from the example above
+lost 135 dates and 99 prices on a new 200-row file without a word. The 3 transforms
+written under 0.2.3 (CSV, XLSX and `--preset sqlite`) kept every date, price and email
+on that same file, counted cell by cell.
+
+It still doesn't mean every value is right. Earlier runs dropped a column and rounded
+weights to whole kilograms, and the lost-values check can't see either. Use a big model
+for real work, read the saved transform and check the output before you import it
+anywhere.
 
 The full notes, and what changed because of them, are in
 [docs/real-runs.md](docs/real-runs.md).
@@ -283,13 +322,13 @@ The full notes, and what changed because of them, are in
 | Module | Job |
 | --- | --- |
 | `io.py` | Loads CSV/XLSX without "fixing" anything (headers and text kept as they are); writes CSV, TSV, XLSX or a SQLite script |
-| `profile.py`, `privacy.py` | Builds the column profile under the chosen privacy mode. This is all the model ever sees about the data |
+| `profile.py`, `privacy.py` | Builds the column profile (types, formats, blanks) under the chosen privacy mode. This is all the model ever sees about the data |
 | `prompt.py` | The rules the model must follow, notes about the file's dates and headers, pulling the code out of the reply, and the repair message after a failure |
 | `providers/` | One interface, two clients: Ollama and OpenAI-compatible APIs. Retries rate limits and server errors |
 | `config.py` | Reads settings in a fixed order and keeps API keys out of logs |
 | `sandbox.py`, `_runner.py` | The check before, the separate process that runs the code, and the checks after |
 | `presets.py` | Export presets: format rules for the model, safe fixes and the output check |
-| `engine.py` | The loop: ask, run, send the error back, stop on success or after N tries |
+| `engine.py` | The loop: ask, run, check for lost values, send the error back, stop on success or after N tries |
 | `cli.py` | `samples`, `profile`, `test-connection`, `run`, `apply` |
 
 ## Use it from Python
