@@ -79,6 +79,8 @@ export interface Run {
   attempts: Attempt[];
   usage: { prompt: number; completion: number; total: number };
   output: Output | null;
+  /** the try whose output is shown */
+  kept: number | null;
 }
 
 export interface Info {

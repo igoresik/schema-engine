@@ -199,11 +199,16 @@ function Attempts({ run, running }: { run: Run; running: boolean }) {
       </ol>
       {!running && (
         <p className={cx("text-[13px]", run.status === "failed" ? "text-bad" : "text-ink-2")}>
-          {run.status === "failed" ? run.error : `Used ${run.usage.total.toLocaleString()} tokens in total.`}
+          {run.status === "failed" ? run.error : `${keptNote(run)}Used ${run.usage.total.toLocaleString()} tokens in total.`}
         </p>
       )}
     </div>
   );
+}
+
+function keptNote(run: Run): string {
+  const kept = run.attempts.find((a) => a.number === run.kept);
+  return kept && !kept.ok ? `No try kept every value, so try ${kept.number} is shown: it lost the fewest. ` : "";
 }
 
 export function label(name: string): string {

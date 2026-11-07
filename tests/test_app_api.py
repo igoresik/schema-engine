@@ -92,6 +92,7 @@ def test_sample_profile_run_and_save(tmp_path, data_dir):
     assert run["usage"]["total"] > 0
     out = run["output"]
     assert out["lost"] == [{"column": "Order Date", "blanked": 5, "filled": 45}]
+    assert run["kept"] == 1
     assert out["table"]["total"] == 50
     assert out["table"]["rows"][0][:4] == [
         "ORD-01000",
@@ -173,6 +174,7 @@ def test_run_retries_then_fails(tmp_path, data_dir):
         "AttributeError: 'DataFrame' object has no attribute 'nope'"
     ] * 2
     assert run["output"] is None
+    assert run["kept"] is None
     assert client.get("/api/runs/nope").status_code == 404
 
 

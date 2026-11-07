@@ -51,8 +51,8 @@ beforeEach(() => {
       const failed = { number: 1, ok: false, summary: "AttributeError: no .str", error: "AttributeError: no .str", tokens: 3510, ms: 4352 };
       return reply(
         polls < 2
-          ? { id: "r1", status: "running", error: null, attempts: [failed], usage: { prompt: 0, completion: 0, total: 3510 }, output: null }
-          : { id: "r1", status: "done", error: null, attempts: [failed, { ...failed, number: 2, ok: true, summary: null, error: null }], usage: { prompt: 4732, completion: 2893, total: 7625 }, output },
+          ? { id: "r1", status: "running", error: null, attempts: [failed], usage: { prompt: 0, completion: 0, total: 3510 }, output: null, kept: null }
+          : { id: "r1", status: "done", error: null, attempts: [failed, { ...failed, number: 2, ok: true, summary: null, error: null }], usage: { prompt: 4732, completion: 2893, total: 7625 }, output, kept: 2 },
       );
     }
     if (url.startsWith("/api/files/f1/profile")) return reply({ profile: { source: "x", row_count: 52, column_count: 2, duplicate_rows: 0, privacy_mode: "masked", columns: [] }, tokens: 961 });

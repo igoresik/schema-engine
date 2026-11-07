@@ -298,6 +298,7 @@ def create_app(
                 "total": usage.total_tokens,
             },
             "output": output_view(run.output) if run.output else None,
+            "kept": run.result.picked + 1 if run.output and run.result else None,
         }
 
     @app.post("/api/apply")
