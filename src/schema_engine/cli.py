@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 from typing import Annotated, NoReturn
 
@@ -10,19 +9,19 @@ import pandas as pd
 import typer
 
 from schema_engine import __version__
-from schema_engine.config import ConfigError, Settings, load_settings
+from schema_engine.config import ConfigError, load_settings
 from schema_engine.engine import (
     Attempt,
-    CompileResult,
     Lost,
     compile_transform,
     lost_values,
     preset_error,
+    transform_script,
 )
 from schema_engine.io import (
-    EXCEL_SUFFIXES,
     WRITE_SUFFIXES,
     UnsupportedFormatError,
+    default_output,
     load_dataset,
     save_dataset,
 )
@@ -158,7 +157,7 @@ def run(
 ) -> None:
     """Have the LLM write a transform for PATH, run it in the sandbox, and save both."""
     target = _preset(preset)
-    output = output or _default_output(path, target)
+    output = output or default_output(path, target)
     save = save or path.with_name(f"{path.stem}_transform.py")
     _check_writable(output, target)
     df = _load(path, sheet)
@@ -208,7 +207,9 @@ def run(
     if result.lost:
         _warn_lost(result.lost, f"No try kept every value, so attempt {result.picked + 1} is kept.")
     save.parent.mkdir(parents=True, exist_ok=True)
-    save.write_text(_script(result, path, save, instruction, settings, target), encoding="utf-8")
+    save.write_text(
+        transform_script(result, path, save, instruction, settings, target), encoding="utf-8"
+    )
     _save(result.output, output, saved=save)
     typer.echo(f"{len(result.output)} rows -> {output}")
     typer.echo(f"transform -> {save}")
@@ -228,7 +229,7 @@ def apply(
 ) -> None:
     """Run a saved transform on PATH in the sandbox. No LLM, no tokens."""
     target = _preset(preset)
-    output = output or _default_output(path, target)
+    output = output or default_output(path, target)
     _check_writable(output, target)
     df = _load(path, sheet)
     result = run_transform(script.read_text(encoding="utf-8"), df, timeout=timeout)
@@ -280,13 +281,6 @@ def _preset(name: str | None) -> ExportPreset | None:
     return EXPORT_PRESETS[name.lower()]
 
 
-def _default_output(path: Path, target: ExportPreset | None = None) -> Path:
-    suffix = target.suffix if target else path.suffix.lower()
-    if suffix not in WRITE_SUFFIXES:
-        suffix = ".xlsx" if suffix in EXCEL_SUFFIXES else ".csv"
-    return path.with_name(f"{path.stem}_clean{suffix}")
-
-
 def _check_writable(output: Path, target: ExportPreset | None = None) -> None:
     """Fail before spending tokens on a file type that can't be written."""
     suffix = output.suffix.lower()
@@ -298,26 +292,6 @@ def _check_writable(output: Path, target: ExportPreset | None = None) -> None:
 
 def _last_line(error: str) -> str:
     return error.strip().splitlines()[-1]
-
-
-def _script(
-    result: CompileResult,
-    path: Path,
-    save: Path,
-    instruction: str,
-    settings: Settings,
-    target: ExportPreset | None = None,
-) -> str:
-    task = "\n".join(f"#   {line}" for line in instruction.strip().splitlines())
-    flag = f" --preset {target.name}" if target else ""
-    header = (
-        f"# schema-engine transform for {path.name}, made {date.today().isoformat()}\n"
-        f"# Task:\n{task}\n"
-        f"# Model: {settings.provider}/{settings.model}, {len(result.attempts)} attempt(s), "
-        f"{result.usage.total_tokens} tokens\n"
-        f"# Run it again without the model: schema-engine apply {save.name} {path.name}{flag}\n\n"
-    )
-    return header + (result.code or "")
 
 
 if __name__ == "__main__":  # pragma: no cover

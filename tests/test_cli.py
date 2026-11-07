@@ -7,8 +7,8 @@ import pytest
 from typer.testing import CliRunner
 
 from schema_engine import __version__
-from schema_engine.cli import _default_output, app
-from schema_engine.io import load_dataset
+from schema_engine.cli import app
+from schema_engine.io import default_output, load_dataset
 from schema_engine.presets import EXPORT_PRESETS
 from schema_engine.providers import AuthenticationError, FakeProvider, RateLimits
 from schema_engine.samples import write_samples
@@ -209,9 +209,9 @@ def test_apply_reports_errors_and_excel_output(clean_env, orders, tmp_path):
     ("name", "expected"),
     [("a.csv", "a_clean.csv"), ("a.TSV", "a_clean.tsv"), ("a.xls", "a_clean.xlsx")],
 )
-def test_default_output(name, expected):
-    assert _default_output(Path(name)) == Path(expected)
-    assert _default_output(Path(name), EXPORT_PRESETS["shopify"]) == Path("a_clean.csv")
+def testdefault_output(name, expected):
+    assert default_output(Path(name)) == Path(expected)
+    assert default_output(Path(name), EXPORT_PRESETS["shopify"]) == Path("a_clean.csv")
 
 
 SHOPIFY = """```python

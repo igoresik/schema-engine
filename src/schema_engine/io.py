@@ -15,9 +15,13 @@ import sqlite3
 from contextlib import closing
 from datetime import date, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from schema_engine.presets import ExportPreset
 
 CSV_SUFFIXES = {".csv", ".tsv", ".txt"}
 EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
@@ -56,6 +60,14 @@ def save_dataset(df: pd.DataFrame, path: str | Path) -> None:
         path.write_text(script, encoding="utf-8")
     else:
         df.to_csv(path, index=False, sep="	" if suffix == ".tsv" else ",")
+
+
+def default_output(path: Path, target: ExportPreset | None = None) -> Path:
+    """``NAME_clean`` next to ``path``, in a format that can be written."""
+    suffix = target.suffix if target else path.suffix.lower()
+    if suffix not in WRITE_SUFFIXES:
+        suffix = ".xlsx" if suffix in EXCEL_SUFFIXES else ".csv"
+    return path.with_name(f"{path.stem}_clean{suffix}")
 
 
 def sqlite_script(df: pd.DataFrame, table: str) -> str:
