@@ -79,7 +79,7 @@ export function TaskPanel({
   return (
     <aside className="flex min-h-0 w-[360px] shrink-0 flex-col border-r border-line bg-surface">
       <form
-        className="grid gap-4 overflow-y-auto p-5"
+        className="grid gap-4 overflow-x-hidden overflow-y-auto p-5"
         onSubmit={(e) => {
           e.preventDefault();
           start.mutate();
@@ -185,9 +185,9 @@ function Attempts({ run, running }: { run: Run; running: boolean }) {
             <div className="min-w-0 flex-1">
               <div className="flex justify-between gap-2">
                 <span className="font-medium">Try {a.number} {a.ok ? "worked" : "failed"}</span>
-                <span className="cells text-ink-3">{a.tokens.toLocaleString()} tok, {(a.ms / 1000).toFixed(1)} s</span>
+                <span className="cells shrink-0 text-ink-3">{a.tokens.toLocaleString()} tok, {(a.ms / 1000).toFixed(1)} s</span>
               </div>
-              {a.summary && <p className="cells mt-0.5 break-words text-ink-2" title={a.error ?? undefined}>{a.summary}</p>}
+              {a.summary && <p className="cells mt-0.5 line-clamp-3 text-ink-2 [overflow-wrap:anywhere]" title={a.error ?? undefined}>{a.summary}</p>}
             </div>
           </li>
         ))}
