@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from schema_engine import _runner
-from schema_engine.sandbox import check_code, run_transform
+from schema_engine.sandbox import check_code, child_command, run_transform
 
 GOOD = """
 import re
@@ -165,6 +165,13 @@ def test_child_gets_no_api_keys_and_crashes_are_reported(monkeypatch, dirty_df):
     assert run_transform("def transform(df):\n    return df\n", dirty_df).error == (
         "sandbox exited with code 9"
     )
+
+
+def test_frozen_app_runs_itself_as_the_child(monkeypatch, tmp_path):
+    assert child_command(tmp_path)[1:] == ["-I", "-m", "schema_engine._runner", str(tmp_path)]
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "C:/App/SchemaEngine.exe")
+    assert child_command(tmp_path) == ["C:/App/SchemaEngine.exe", "--sandbox", str(tmp_path)]
 
 
 def test_runtime_blocks_files_network_and_imports(tmp_path):

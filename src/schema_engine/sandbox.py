@@ -113,6 +113,9 @@ ERROR_LIMIT = 2000
 # Everything else (API keys included) stays out of the child's environment.
 _CHILD_ENV = ("PATH", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL")
 
+SANDBOX_FLAG = "--sandbox"
+"""How the desktop app's exe is told to act as the child process."""
+
 
 @dataclass(frozen=True)
 class SandboxResult:
@@ -138,7 +141,7 @@ def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> Sand
         env = {k: os.environ[k] for k in _CHILD_ENV if k in os.environ}
         try:
             proc = subprocess.run(
-                [sys.executable, "-I", "-m", "schema_engine._runner", str(work)],
+                child_command(work),
                 cwd=work,
                 env=env,
                 timeout=timeout,
@@ -161,6 +164,13 @@ def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> Sand
         else:
             error = proc.stderr.strip() or f"sandbox exited with code {proc.returncode}"
         return SandboxResult(None, error[-ERROR_LIMIT:])
+
+
+def child_command(work: Path) -> list[str]:
+    # A frozen app has no python.exe to run, so it runs itself.
+    if getattr(sys, "frozen", False):
+        return [sys.executable, SANDBOX_FLAG, str(work)]
+    return [sys.executable, "-I", "-m", "schema_engine._runner", str(work)]
 
 
 def check_code(code: str) -> list[str]:
