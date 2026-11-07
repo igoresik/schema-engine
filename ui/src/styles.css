@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@import "@fontsource/instrument-sans/400.css";
+@import "@fontsource/instrument-sans/500.css";
+@import "@fontsource/instrument-sans/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@theme inline {
+  --font-sans: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-mask: var(--mask);
+  --color-mask-ink: var(--mask-ink);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+}
+
+:root {
+  color-scheme: light;
+  --bg: #e9eeec;
+  --surface: #f7f9f8;
+  --raised: #ffffff;
+  --line: #d3dbd8;
+  --ink: #14211f;
+  --ink-2: #4a5956;
+  --ink-3: #7f8d8a;
+  --accent: #0f7a68;
+  --accent-soft: #d9ede8;
+  --mask: #f7dc7a;
+  --mask-ink: #5a4300;
+  --good: #11795a;
+  --warn: #9a5b00;
+  --warn-soft: #fbeed6;
+  --bad: #b8392a;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111817;
+    --surface: #172120;
+    --raised: #1e2a28;
+    --line: #2b3836;
+    --ink: #e4ebe9;
+    --ink-2: #a0afac;
+    --ink-3: #6d7c79;
+    --accent: #40c4a5;
+    --accent-soft: #19362f;
+    --mask: #5b4911;
+    --mask-ink: #f5dc8c;
+    --good: #45c08f;
+    --warn: #e2a74a;
+    --warn-soft: #33270f;
+    --bad: #ff7a68;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.press {
+  transition: transform 160ms var(--ease-out), background-color 160ms, border-color 160ms, color 160ms;
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* masked values: what the model gets instead of your data */
+.masked {
+  background: linear-gradient(transparent 12%, var(--mask) 12%, var(--mask) 88%, transparent 88%);
+  color: var(--mask-ink);
+  padding: 0 0.2em;
+  border-radius: 2px;
+}
+
+.cells {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.attempt-in {
+  animation: attempt-in 260ms var(--ease-out);
+}
+@keyframes attempt-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .press,
+  .attempt-in {
+    transition: none;
+    animation: none;
+  }
+}
