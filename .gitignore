@@ -11,3 +11,5 @@ coverage.xml
 htmlcov/
 .env
 samples/
+ui/node_modules/
+src/schema_engine/app/static/
