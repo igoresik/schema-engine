@@ -1,4 +1,4 @@
-"""``python -m schema_engine.app --serve``: the API and built UI without the window, for development."""
+"""``python -m schema_engine.app --serve``: the API and built UI, no window, for development."""
 
 import argparse
 
