@@ -21,6 +21,9 @@ cleaned again for free, without the model.
 - **You get code, not a black box.** Every run saves a plain Python file you can read,
   edit and commit.
 - **Bring your own key.** Runs on Ollama (local, free), OpenAI or Groq.
+- **Desktop app or command line.** Same engine in both.
+
+![Schema Engine: the sample file after a saved transform, with the 5 dates it could not read flagged](docs/app.png)
 
 ## Example
 
@@ -54,7 +57,27 @@ Across all 50 rows, no date or price was lost: `-` and blanks stay empty, and ev
 else was parsed. That's real output from `openai/gpt-oss-120b` on version 0.2.3. It isn't
 always this clean, so check the output (see [How well it works](#how-well-it-works)).
 
-## Install
+## Desktop app (Windows)
+
+Download `SchemaEngine-Setup-<version>.exe` from the
+[latest release](https://github.com/igoresik/schema-engine/releases/latest) and run it.
+It installs for your user only, so it needs no admin rights, and it puts Schema Engine in
+the Start menu. Windows needs the Microsoft Edge WebView2 Runtime, which Windows 10 and 11
+already have.
+
+1. Open a CSV or Excel file, drop one into the window, or try the sample file.
+2. **What the model sees** shows the profile the model will get and its token count.
+   The privacy switch (fake rows, no values, real rows) changes it live.
+3. Write what should change and press **Clean the file**. Each try shows up as it
+   happens, with its error, tokens and time.
+4. Check **Cleaned**: columns that lost values are marked. Then save the cleaned file
+   and the transform. **Run a saved transform** cleans next month's file with no tokens.
+
+API keys go in **Settings**. The app keeps them in Windows Credential Manager, never in a
+file, and the command line finds them there too. The window talks to a small local server
+that only listens on this computer and refuses requests from websites.
+
+## Install the command line
 
 Needs Python 3.11 or newer.
 
@@ -331,6 +354,9 @@ The full notes, and what changed because of them, are in
 | `presets.py` | Export presets: format rules for the model, safe fixes and the output check |
 | `engine.py` | The loop: ask, run, check for lost values, send the error back, stop on success or after N tries |
 | `cli.py` | `samples`, `profile`, `test-connection`, `run`, `apply` |
+| `app/api.py` | The desktop app's local API: files, profile, runs, saving, settings |
+| `app/desktop.py` | The window (pywebview, WebView2) with native open and save dialogs |
+| `ui/` | The app's interface: React, TypeScript, Tailwind, built into `app/static` |
 
 ## Use it from Python
 
@@ -363,6 +389,19 @@ pytest --cov
 
 CI runs the same on Python 3.11, 3.12 and 3.13. Tests use a fake provider, so they never
 need a key. The build plan is in [docs/PLAN.md](docs/PLAN.md).
+
+The desktop app (needs Node 24+):
+
+```bash
+cd ui && npm ci && npm test && npm run build && cd ..
+pip install -e ".[app]"
+python -m schema_engine.app            # the window
+python -m schema_engine.app --serve    # or the same UI in a browser, at 127.0.0.1:8765
+```
+
+`./build.ps1` makes the installer in `dist/` (Windows, needs Inno Setup 6). CI builds it on
+every run, checks that the sandbox works inside the exe, and attaches it to the release
+when a `v*` tag is pushed.
 
 ## License
 

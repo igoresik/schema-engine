@@ -25,7 +25,12 @@ Agreed 2026-11-03. Each step lands as its own pull request.
    found in each column (masked). Values that parsing turned blank count as a failed try
    in `run`, and `apply` warns about them.
 
-Later: optional FastAPI wrapper. Shopify market, metafield and packed-dimension columns if
+8. **Desktop app** (version 0.3.0). The same engine in a Windows window: FastAPI on
+   127.0.0.1 + a React UI in pywebview, a PyInstaller exe and an Inno Setup installer. The sandbox runs the app's own exe as its child, since a frozen app
+   has no `python.exe`. Keys saved in the app go to Windows Credential Manager, and the
+   CLI reads them too. PRs #15 to #19.
+
+Later: Shopify market, metafield and packed-dimension columns if
 a real import needs them.
 
 ## Constraints

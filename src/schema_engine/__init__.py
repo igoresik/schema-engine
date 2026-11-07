@@ -4,7 +4,7 @@ from schema_engine.io import load_dataset
 from schema_engine.privacy import PrivacyMode, mask_value
 from schema_engine.profile import ColumnProfile, DatasetProfile, build_profile
 
-__version__ = "0.2.3"
+__version__ = "0.3.0"
 
 __all__ = [
     "ColumnProfile",
