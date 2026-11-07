@@ -209,6 +209,25 @@ def save_key(provider: str, key: str | None) -> None:
         keyring.delete_password(APP_NAME, provider)
 
 
+def update_config(
+    values: Mapping[str, Any], *, provider: str | None = None, path: Path | None = None
+) -> None:
+    """Merge ``values`` into the config file, or its ``providers.<provider>`` section.
+
+    Empty values remove the key, so the built-in default applies again.
+    """
+    path = path or config_path()
+    data = _read_config_file(path)
+    target = data.setdefault("providers", {}).setdefault(provider, {}) if provider else data
+    for key, value in values.items():
+        if value in (None, ""):
+            target.pop(key, None)
+        else:
+            target[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 def _read_config_file(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}

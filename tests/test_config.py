@@ -14,6 +14,7 @@ from schema_engine.config import (
     require_key,
     save_key,
     stored_key,
+    update_config,
 )
 
 
@@ -185,3 +186,17 @@ def test_no_password_store_means_no_key(monkeypatch):
     assert stored_key("groq") is None
     monkeypatch.setitem(sys.modules, "keyring", None)
     assert stored_key("groq") is None
+
+
+def test_update_config_keeps_other_values(tmp_path):
+    path = tmp_path / "cfg" / "config.json"
+    update_config({"provider": "groq"}, path=path)
+    update_config({"model": "qwen/qwen3.8-27b", "base_url": ""}, provider="groq", path=path)
+    update_config({"model": "llama3.1"}, provider="ollama", path=path)
+    update_config({"model": None}, provider="ollama", path=path)
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "provider": "groq",
+        "providers": {"groq": {"model": "qwen/qwen3.8-27b"}, "ollama": {}},
+    }
+    settings = load_settings(env={}, dotenv_path=None, config_file=path)
+    assert (settings.provider, settings.model) == ("groq", "qwen/qwen3.8-27b")
