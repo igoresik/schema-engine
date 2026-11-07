@@ -1,13 +1,18 @@
-"""``python -m schema_engine.app --serve``: the API and built UI, no window, for development."""
+"""``python -m schema_engine.app`` opens the window; ``--serve`` runs only the API + built UI."""
 
 import argparse
 
-import uvicorn
-
-from schema_engine.app.api import create_app
-
 parser = argparse.ArgumentParser(prog="python -m schema_engine.app")
-parser.add_argument("--serve", action="store_true", required=True, help="Run the API only.")
+parser.add_argument("--serve", action="store_true", help="Run the API only, for a browser.")
 parser.add_argument("--port", type=int, default=8765)
 args = parser.parse_args()
-uvicorn.run(create_app(), host="127.0.0.1", port=args.port)
+if args.serve:
+    import uvicorn
+
+    from schema_engine.app.api import create_app
+
+    uvicorn.run(create_app(), host="127.0.0.1", port=args.port)
+else:
+    from schema_engine.app.desktop import main
+
+    main()
