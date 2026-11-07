@@ -6,7 +6,8 @@ Resolution order, highest first:
 2. Process environment variables
 3. A ``.env`` file in the working directory
 4. ``$XDG_CONFIG_HOME/schema-engine/config.json`` (default ``~/.config/...``)
-5. Built-in provider presets
+5. Keys the desktop app saved in the system's password store
+6. Built-in provider presets
 
 Nothing here ever sends a key anywhere; the provider clients use it directly
 against the provider's own endpoint.
@@ -17,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -149,6 +151,8 @@ def load_settings(
     )
     resolved_key = api_key or (merged_env.get(preset.key_env) if preset.key_env else None)
     resolved_key = resolved_key or section.get("api_key")
+    if not resolved_key and preset.key_env:
+        resolved_key = stored_key(name)
 
     settings = Settings(
         provider=name,
@@ -174,9 +178,35 @@ def require_key(settings: Settings) -> str | None:
     if settings.preset.key_env and not settings.api_key:
         raise ConfigError(
             f"No API key for '{settings.provider}'. Set {settings.preset.key_env} in your "
-            f"environment or .env file, or add it to {config_path()}."
+            f"environment or .env file, add it to {config_path()}, or save it in the app's "
+            "Settings."
         )
     return settings.api_key
+
+
+def stored_key(provider: str) -> str | None:
+    """Key the desktop app saved in the system's password store (Credential Manager)."""
+    try:
+        import keyring
+        from keyring.errors import KeyringError
+    except ImportError:  # CLI installed without the app extra
+        return None
+    try:
+        return keyring.get_password(APP_NAME, provider)
+    except KeyringError:  # no password store on this machine
+        return None
+
+
+def save_key(provider: str, key: str | None) -> None:
+    """Save ``key`` for ``provider``, or forget it when empty."""
+    import keyring
+    from keyring.errors import PasswordDeleteError
+
+    if key:
+        keyring.set_password(APP_NAME, provider, key)
+        return
+    with suppress(PasswordDeleteError):  # nothing saved
+        keyring.delete_password(APP_NAME, provider)
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:

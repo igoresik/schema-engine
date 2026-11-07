@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 
@@ -11,6 +12,8 @@ from schema_engine.config import (
     parse_dotenv,
     redact,
     require_key,
+    save_key,
+    stored_key,
 )
 
 
@@ -159,3 +162,26 @@ def test_temperature_per_provider():
     assert PRESETS["ollama"].temperature == 0.0
     assert PRESETS["groq"].temperature == 0.0
     assert PRESETS["openai"].temperature is None
+
+
+def test_key_saved_in_the_app_is_the_last_source(tmp_path, memory_keyring):
+    save_key("groq", "gsk-from-app")
+    assert settings_from(tmp_path, provider="groq").api_key == "gsk-from-app"
+    env = {"GROQ_API_KEY": "gsk-from-env"}
+    assert settings_from(tmp_path, env=env, provider="groq").api_key == "gsk-from-env"
+    assert settings_from(tmp_path, provider="ollama").api_key is None
+
+    save_key("groq", "")
+    save_key("groq", None)
+    assert memory_keyring.saved == {}
+    assert stored_key("groq") is None
+
+
+def test_no_password_store_means_no_key(monkeypatch):
+    import keyring
+    from keyring.backends.fail import Keyring as NoStore
+
+    keyring.set_keyring(NoStore())
+    assert stored_key("groq") is None
+    monkeypatch.setitem(sys.modules, "keyring", None)
+    assert stored_key("groq") is None

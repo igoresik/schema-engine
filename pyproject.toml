@@ -18,7 +18,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+app = [
+    "keyring>=25",
+]
 dev = [
+    "schema-engine[app]",
     "pytest>=8",
     "pytest-cov>=5",
     "ruff>=0.6",
