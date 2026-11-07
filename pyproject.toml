@@ -44,6 +44,8 @@ addopts = "-q"
 [tool.coverage.run]
 source = ["schema_engine"]
 branch = true
+# entry points that only start a server or a window
+omit = ["*/schema_engine/app/__main__.py"]
 
 [tool.coverage.report]
 show_missing = true
