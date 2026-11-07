@@ -22,6 +22,7 @@ app = [
     "keyring>=25",
     "fastapi>=0.162",
     "uvicorn>=0.54",
+    "pywebview>=6.2; sys_platform == 'win32'",
 ]
 dev = [
     "schema-engine[app]",
@@ -45,7 +46,7 @@ addopts = "-q"
 source = ["schema_engine"]
 branch = true
 # entry points that only start a server or a window
-omit = ["*/schema_engine/app/__main__.py"]
+omit = ["*/schema_engine/app/__main__.py", "*/schema_engine/app/desktop.py"]
 
 [tool.coverage.report]
 show_missing = true
