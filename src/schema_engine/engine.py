@@ -6,10 +6,13 @@ import ast
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
 
 import pandas as pd
 from pandas.api.types import is_bool, is_bool_dtype, is_datetime64_any_dtype, is_numeric_dtype
 
+from schema_engine.config import Settings
 from schema_engine.presets import ExportPreset
 from schema_engine.privacy import NULL_TOKENS, PrivacyMode, mask_string
 from schema_engine.profile import build_profile
@@ -235,3 +238,23 @@ def _string_constants(code: str) -> set[str]:
     return {
         n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)
     }
+
+
+def transform_script(
+    result: CompileResult,
+    path: Path,
+    save: Path,
+    instruction: str,
+    settings: Settings,
+    target: ExportPreset | None = None,
+) -> str:
+    task = "\n".join(f"#   {line}" for line in instruction.strip().splitlines())
+    flag = f" --preset {target.name}" if target else ""
+    header = (
+        f"# schema-engine transform for {path.name}, made {date.today().isoformat()}\n"
+        f"# Task:\n{task}\n"
+        f"# Model: {settings.provider}/{settings.model}, {len(result.attempts)} attempt(s), "
+        f"{result.usage.total_tokens} tokens\n"
+        f"# Run it again without the model: schema-engine apply {save.name} {path.name}{flag}\n\n"
+    )
+    return header + (result.code or "")
