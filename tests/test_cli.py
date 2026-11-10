@@ -49,6 +49,21 @@ def test_profile_unsupported_type(tmp_path):
     assert result.exit_code == 2
 
 
+@pytest.mark.parametrize(
+    ("name", "content", "message"),
+    [
+        ("empty.csv", "", "No columns to parse"),
+        ("fake.xlsx", "hello", "Excel file format cannot be determined"),
+    ],
+)
+def test_profile_unreadable_file(tmp_path, name, content, message):
+    path = tmp_path / name
+    path.write_text(content)
+    result = runner.invoke(app, ["profile", str(path)])
+    assert result.exit_code == 2
+    assert message in result.stderr
+
+
 @pytest.fixture
 def clean_env(tmp_path, monkeypatch):
     """No real keys, .env or user config leak into test-connection tests."""
