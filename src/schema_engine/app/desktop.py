@@ -31,7 +31,7 @@ LOADING = """<!doctype html>
   setTimeout(() => document.getElementById("slow").style.visibility = "visible", 5000)
 </script>"""
 FILE_TYPES = {
-    "data": ("Spreadsheets (*.csv;*.tsv;*.txt;*.xlsx;*.xlsm;*.xls)", "All files (*.*)"),
+    "data": ("Spreadsheets (*.csv;*.tsv;*.txt;*.xlsx;*.xlsm)", "All files (*.*)"),
     "transform": ("Python transform (*.py)", "All files (*.*)"),
 }
 SAVE_TYPES = {

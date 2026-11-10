@@ -9,6 +9,9 @@ import pytest
 from schema_engine.io import UnsupportedFormatError, load_dataset, save_dataset, sqlite_script
 from schema_engine.samples import write_samples
 
+# The header that marks a pre-2007 .xls workbook
+OLD_XLS = bytes.fromhex("d0cf11e0a1b11ae1") + bytes(504)
+
 
 def test_csv_keeps_headers_text_and_placeholders(tmp_path):
     path = tmp_path / "a.csv"
@@ -56,6 +59,15 @@ def test_unsupported(tmp_path):
     path.write_text("{}")
     with pytest.raises(UnsupportedFormatError):
         load_dataset(path)
+
+
+def test_old_excel_format(tmp_path):
+    with pytest.raises(UnsupportedFormatError, match=r"'\.xls'"):
+        load_dataset(tmp_path / "old.xls")
+    renamed = tmp_path / "old.xlsx"
+    renamed.write_bytes(OLD_XLS)
+    with pytest.raises(ValueError, match=r"old.xlsx isn't an .xlsx workbook"):
+        load_dataset(renamed)
 
 
 def test_empty_csv(tmp_path):

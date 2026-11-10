@@ -97,7 +97,7 @@ export function App() {
       <input
         ref={picker}
         type="file"
-        accept=".csv,.tsv,.txt,.xlsx,.xlsm,.xls"
+        accept=".csv,.tsv,.txt,.xlsx,.xlsm"
         hidden
         aria-label="Spreadsheet"
         onChange={(e) => {
