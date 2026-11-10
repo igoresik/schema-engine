@@ -20,7 +20,6 @@ from schema_engine.engine import (
 )
 from schema_engine.io import (
     WRITE_SUFFIXES,
-    UnsupportedFormatError,
     default_output,
     load_dataset,
     save_dataset,
@@ -264,7 +263,7 @@ def _save(df: pd.DataFrame, output: Path, *, saved: Path | None = None) -> None:
 def _load(path: Path, sheet: str) -> pd.DataFrame:
     try:
         return load_dataset(path, sheet=int(sheet) if sheet.isdigit() else sheet)
-    except UnsupportedFormatError as exc:
+    except ValueError as exc:  # UnsupportedFormatError, empty CSV, broken workbook
         _fail(str(exc), code=2)
 
 
