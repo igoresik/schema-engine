@@ -222,7 +222,7 @@ def test_apply_reports_errors_and_excel_output(clean_env, orders, tmp_path):
 
 @pytest.mark.parametrize(
     ("name", "expected"),
-    [("a.csv", "a_clean.csv"), ("a.TSV", "a_clean.tsv"), ("a.xls", "a_clean.xlsx")],
+    [("a.csv", "a_clean.csv"), ("a.TSV", "a_clean.tsv"), ("a.xlsm", "a_clean.xlsx")],
 )
 def testdefault_output(name, expected):
     assert default_output(Path(name)) == Path(expected)

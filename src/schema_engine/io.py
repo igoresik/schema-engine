@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from schema_engine.presets import ExportPreset
 
 CSV_SUFFIXES = {".csv", ".tsv", ".txt"}
-EXCEL_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
+EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
 WRITE_SUFFIXES = {".csv", ".tsv", ".txt", ".xlsx", ".sql"}
 ENCODINGS = ("utf-8-sig", "cp1252", "latin-1")
 
@@ -171,7 +171,12 @@ def _load_csv(path: Path) -> pd.DataFrame:
 
 
 def _load_excel(path: Path, sheet: str | int) -> pd.DataFrame:
-    raw = pd.read_excel(path, sheet_name=sheet, header=None, keep_default_na=False, na_values=[""])
+    try:
+        raw = pd.read_excel(
+            path, sheet_name=sheet, header=None, keep_default_na=False, na_values=[""]
+        )
+    except ImportError as exc:  # pandas picks the reader from the bytes, e.g. a renamed .xls
+        raise ValueError(f"{path.name} isn't an .xlsx workbook. Save it as .xlsx or CSV.") from exc
     df = _promote_header(raw)
     return df.infer_objects()
 

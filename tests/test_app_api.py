@@ -245,6 +245,9 @@ def test_open_errors_without_dialogs(tmp_path, data_dir):
     odd = tmp_path / "notes.pdf"
     odd.write_text("x", encoding="utf-8")
     assert client.post("/api/files/open", json={"path": str(odd)}).status_code == 400
+    renamed = tmp_path / "old.xlsx"
+    renamed.write_bytes(bytes.fromhex("d0cf11e0a1b11ae1") + bytes(504))
+    assert client.post("/api/files/open", json={"path": str(renamed)}).status_code == 400
     assert client.post("/api/apply", json={"file": "x", "code": "y"}).status_code == 404
     opened = client.post("/api/files/sample").json()
     assert client.post("/api/apply", json={"file": opened["id"]}).status_code == 400
