@@ -31,6 +31,15 @@ def test_semicolon_delimiter_and_cp1252(tmp_path):
     assert df.iloc[0, 0] == "1,50"
 
 
+def test_csv_rows_longer_than_the_header(tmp_path):
+    path = tmp_path / "r.csv"
+    path.write_text("id,name\n1,Ann\n2,Bob,extra\n3\n", encoding="utf-8")
+    df = load_dataset(path)
+    assert list(df.columns) == ["id", "name", ""]
+    assert df.iloc[1].tolist() == ["2", "Bob", "extra"]
+    assert df.iloc[2, 1:].isna().all()
+
+
 def test_tsv(tmp_path):
     path = tmp_path / "c.tsv"
     path.write_text("a\tb\n1\t2\n")
