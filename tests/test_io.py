@@ -31,6 +31,14 @@ def test_semicolon_delimiter_and_cp1252(tmp_path):
     assert df.iloc[0, 0] == "1,50"
 
 
+def test_utf16_text_export(tmp_path):
+    path = tmp_path / "u.txt"
+    path.write_bytes("nome\tpreço\r\nLápis\t1,50\r\n".encode("utf-16"))
+    df = load_dataset(path)
+    assert list(df.columns) == ["nome", "preço"]
+    assert df.iloc[0].tolist() == ["Lápis", "1,50"]
+
+
 def test_csv_rows_longer_than_the_header(tmp_path):
     path = tmp_path / "r.csv"
     path.write_text("id,name\n1,Ann\n2,Bob,extra\n3\n", encoding="utf-8")
