@@ -237,3 +237,16 @@ def test_runner_success_writes_output(tmp_path):
     rc, error = run_in_process(tmp_path, "def transform(df):\n    return df.assign(b=1)\n")
     assert (rc, error) == (0, None)
     assert '"b":1' in (tmp_path / "output.json").read_text(encoding="utf-8")
+
+
+def test_plain_dates_stay_dates(dirty_df):
+    code = (
+        "import pandas as pd\n"
+        "def transform(df):\n"
+        "    d = pd.Series(pd.to_datetime(['2024-01-05', None])).dt.date\n"
+        "    return pd.DataFrame({'d': d, 'n': [1, 2]})\n"
+    )
+    result = run_transform(code, dirty_df)
+    assert result.error is None
+    assert result.output["d"].tolist()[0] == "2024-01-05"
+    assert result.output["d"].isna().tolist() == [False, True]
