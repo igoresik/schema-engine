@@ -56,6 +56,16 @@ def test_excel_types_inferred(tmp_path):
     assert pd.api.types.is_datetime64_any_dtype(df["when"])
 
 
+def test_excel_sheet_named_like_a_number(tmp_path):
+    path = tmp_path / "years.xlsx"
+    with pd.ExcelWriter(path) as writer:
+        pd.DataFrame({"year": [2023]}).to_excel(writer, sheet_name="2023", index=False)
+        pd.DataFrame({"year": [2024]}).to_excel(writer, sheet_name="2024", index=False)
+    assert load_dataset(path, sheet="2024").iloc[0, 0] == 2024
+    assert load_dataset(path, sheet="1").iloc[0, 0] == 2024  # no sheet called 1, so an index
+    assert load_dataset(path, sheet=0).iloc[0, 0] == 2023
+
+
 def test_sample_files_round_trip(tmp_path):
     csv_path, xlsx_path = write_samples(tmp_path, rows=10)
     a, b = load_dataset(csv_path), load_dataset(xlsx_path)

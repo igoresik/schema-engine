@@ -179,15 +179,15 @@ def create_app(
         return datasets[file_id]
 
     def open_dataset(path: Path, sheet: str = "0", *, dropped: bool = False) -> dict[str, Any]:
-        picked: str | int = int(sheet) if sheet.isdigit() else sheet
         try:
-            df = load_dataset(path, sheet=picked)
+            df = load_dataset(path, sheet=sheet)
         except (UnsupportedFormatError, FileNotFoundError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from exc
         sheets = []
         if path.suffix.lower() in EXCEL_SUFFIXES:
             with pd.ExcelFile(path) as book:
                 sheets = [str(name) for name in book.sheet_names]
+        picked: str | int = int(sheet) if sheet.isdigit() and sheet not in sheets else sheet
         item = Dataset(uuid.uuid4().hex, path, df, picked, sheets, dropped)
         datasets[item.id] = item
         return dataset_view(item)

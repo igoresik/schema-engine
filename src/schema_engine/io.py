@@ -181,9 +181,13 @@ def _load_csv(path: Path) -> pd.DataFrame:
 
 def _load_excel(path: Path, sheet: str | int) -> pd.DataFrame:
     try:
-        raw = pd.read_excel(
-            path, sheet_name=sheet, header=None, keep_default_na=False, na_values=[""]
-        )
+        with pd.ExcelFile(path) as book:
+            # "2024" is a sheet's name when one is called that, else an index.
+            if isinstance(sheet, str) and sheet.isdigit() and sheet not in book.sheet_names:
+                sheet = int(sheet)
+            raw = pd.read_excel(
+                book, sheet_name=sheet, header=None, keep_default_na=False, na_values=[""]
+            )
     except ImportError as exc:  # pandas picks the reader from the bytes, e.g. a renamed .xls
         raise ValueError(f"{path.name} isn't an .xlsx workbook. Save it as .xlsx or CSV.") from exc
     df = _promote_header(raw)

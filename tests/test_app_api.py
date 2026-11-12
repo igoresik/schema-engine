@@ -277,6 +277,8 @@ def test_dropped_excel_file_and_sheets(tmp_path, data_dir, monkeypatch):
     times = client.post("/api/files/open", json={"path": str(copy), "sheet": "Times"}).json()
     assert times["sheet"] == "Times"
     assert times["table"]["rows"] == [["2024-01-02 10:30:00"]]
+    second = client.post("/api/files/open", json={"path": str(copy), "sheet": "1"}).json()
+    assert second["sheet"] == 1
     assert client.post("/api/files/drop?name=", content=b"x").status_code == 400
 
     # A dropped file is a copy in the data folder, so saving suggests Documents.
@@ -285,6 +287,18 @@ def test_dropped_excel_file_and_sheets(tmp_path, data_dir, monkeypatch):
     applied = client.post("/api/apply", json={"file": dropped["id"], "code": SAME}).json()
     saved = client.post(f"/api/outputs/{applied['id']}/save", json={"kind": "data"}).json()
     assert saved == {"path": str(tmp_path / "home" / "Documents" / "book_clean.xlsx")}
+
+
+def test_open_sheet_named_like_a_number(tmp_path, data_dir):
+    book = tmp_path / "years.xlsx"
+    with pd.ExcelWriter(book) as writer:
+        pd.DataFrame({"year": [2023]}).to_excel(writer, sheet_name="2023", index=False)
+        pd.DataFrame({"year": [2024]}).to_excel(writer, sheet_name="2024", index=False)
+    client = make_client(tmp_path)
+    opened = client.post("/api/files/open", json={"path": str(book), "sheet": "2024"})
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["sheet"] == "2024"
+    assert opened.json()["table"]["rows"] == [[2024]]
 
 
 def test_settings_round_trip(tmp_path, memory_keyring, monkeypatch):
