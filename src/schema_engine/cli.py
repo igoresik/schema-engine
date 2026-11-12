@@ -262,7 +262,7 @@ def _save(df: pd.DataFrame, output: Path, *, saved: Path | None = None) -> None:
 
 def _load(path: Path, sheet: str) -> pd.DataFrame:
     try:
-        return load_dataset(path, sheet=int(sheet) if sheet.isdigit() else sheet)
+        return load_dataset(path, sheet=sheet)
     except ValueError as exc:  # UnsupportedFormatError, empty CSV, broken workbook
         _fail(str(exc), code=2)
 
