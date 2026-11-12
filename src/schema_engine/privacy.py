@@ -120,9 +120,10 @@ def _mask_core(s: str) -> str:
     m = _NUMERIC_DATE_RE.match(s)
     if m:
         return _numeric_date_token(m)
-    if _MONTH_NAME_RE.search(s) and any(ch.isdigit() for ch in s):
-        # "March 5, 2024" -> "Month D, YYYY"-style shape.
-        return _mask_digits(_MONTH_NAME_RE.sub("Month", s))
+    if len(s) <= 30 and _MONTH_NAME_RE.search(s) and _has_digit(s):
+        # "March 5, 2024" -> "Month 9, 9999". The other words get masked too, they can be names.
+        parts = _MONTH_NAME_RE.split(s)
+        return "".join("Month" if i % 2 else _mask_text(p) for i, p in enumerate(parts))
     if _AMOUNT_RE.match(s):
         return _mask_digits(s)
     return _mask_text(s)
