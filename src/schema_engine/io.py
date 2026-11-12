@@ -9,6 +9,7 @@ alone and reported by the profiler instead.
 
 from __future__ import annotations
 
+import codecs
 import csv
 import math
 import sqlite3
@@ -150,7 +151,10 @@ def _sql_value(v: object) -> object:
 
 def _load_csv(path: Path) -> pd.DataFrame:
     last_error: Exception | None = None
-    for encoding in ENCODINGS:
+    with path.open("rb") as f:
+        # cp1252 decodes UTF-16 without an error, so go by the BOM (Excel's "Unicode Text").
+        utf16 = f.read(2) in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)
+    for encoding in ("utf-16",) if utf16 else ENCODINGS:
         try:
             text_sample = path.read_text(encoding=encoding)[:65536]
         except UnicodeDecodeError as exc:
