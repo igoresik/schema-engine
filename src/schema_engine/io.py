@@ -14,6 +14,7 @@ import math
 import sqlite3
 from contextlib import closing
 from datetime import date, datetime
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -156,7 +157,8 @@ def _load_csv(path: Path) -> pd.DataFrame:
             last_error = exc
             continue
         delimiter = _sniff_delimiter(text_sample, path.suffix.lower())
-        raw = pd.read_csv(
+        read = partial(
+            pd.read_csv,
             path,
             sep=delimiter,
             header=None,
@@ -166,6 +168,13 @@ def _load_csv(path: Path) -> pd.DataFrame:
             encoding=encoding,
             skip_blank_lines=True,
         )
+        try:
+            raw = read()
+        except pd.errors.ParserError:
+            # A row longer than the first one: widen to the longest row instead of giving up.
+            with path.open(encoding=encoding, newline="") as f:
+                width = max(len(row) for row in csv.reader(f, delimiter=delimiter))
+            raw = read(names=range(width))
         return _promote_header(raw)
     raise ValueError(f"Could not decode {path.name}") from last_error
 
