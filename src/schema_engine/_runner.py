@@ -13,6 +13,7 @@ import sys
 import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -36,7 +37,7 @@ def main(workdir: Path) -> int:
     except BaseException as exc:  # the parent wants every failure, SystemExit included
         (workdir / "error.txt").write_text(_format_error(exc), encoding="utf-8")
         return 1
-    result.reset_index(drop=True).to_json(
+    _plain_dates(result).reset_index(drop=True).to_json(
         workdir / "output.json", orient="table", index=False, date_format="iso"
     )
     return 0
@@ -95,6 +96,15 @@ def _check_output(result: object) -> None:
     dupes = sorted({n for n in names if names.count(n) > 1})
     if dupes:
         raise ValueError(f"output column names must be unique, duplicated: {dupes!r}")
+
+
+def _plain_dates(df: pd.DataFrame) -> pd.DataFrame:
+    """``.dt.date`` gives date objects, which to_json writes as midnight timestamps."""
+    for i in range(df.shape[1]):
+        col = df.iloc[:, i]
+        if col.dtype == object:
+            df.isetitem(i, col.map(lambda v: v.isoformat() if type(v) is date else v))
+    return df
 
 
 def _format_error(exc: BaseException) -> str:
