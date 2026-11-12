@@ -223,6 +223,17 @@ def test_dates_that_cant_be_read_back_go_to_the_model(dirty_df):
     assert "Out of bounds" in result.error
 
 
+def test_timedeltas_that_cant_be_read_back_go_to_the_model(dirty_df):
+    code = (
+        "import pandas as pd\n"
+        "def transform(df):\n"
+        "    return pd.DataFrame({'took': pd.to_timedelta(['1D', '2h'])})\n"
+    )
+    result = run_transform(code, dirty_df)
+    assert result.output is None
+    assert result.error.startswith("NotImplementedError: the output can't be read back")
+
+
 def test_stdlib_helpers_that_import_lazily_still_work(tmp_path):
     code = (
         "from datetime import datetime\n"
