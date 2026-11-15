@@ -192,6 +192,9 @@ def check_code(code: str) -> list[str]:
                 continue
             module = node.module or ""
             problems.append(_import_problem(module, line))
+            if any(alias.name == "*" for alias in node.names):
+                # it would hand over blocked names like fromfile without the check seeing them
+                problems.append(f"line {line}: 'from {module} import *' is not allowed")
             problems += [_name_problem(alias.name, line) for alias in node.names]
         elif isinstance(node, ast.Attribute):
             problems.append(_name_problem(node.attr, line))
