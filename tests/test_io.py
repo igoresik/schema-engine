@@ -1,4 +1,5 @@
 import sqlite3
+import zipfile
 from contextlib import closing
 from datetime import date, datetime
 from decimal import Decimal
@@ -95,6 +96,20 @@ def test_old_excel_format(tmp_path):
     renamed.write_bytes(OLD_XLS)
     with pytest.raises(ValueError, match=r"old.xlsx isn't an .xlsx workbook"):
         load_dataset(renamed)
+
+
+def test_damaged_excel(tmp_path):
+    book = tmp_path / "book.xlsx"
+    pd.DataFrame({"a": [1]}).to_excel(book, index=False)
+    cut = tmp_path / "cut.xlsx"
+    cut.write_bytes(book.read_bytes()[:200])
+    with pytest.raises(ValueError, match=r"cut.xlsx is damaged"):
+        load_dataset(cut)
+    other = tmp_path / "other.xlsx"
+    with zipfile.ZipFile(other, "w") as z:
+        z.writestr("notes.txt", "hi")
+    with pytest.raises(ValueError, match=r"other.xlsx is damaged"):
+        load_dataset(other)
 
 
 def test_empty_csv(tmp_path):
