@@ -13,6 +13,7 @@ import codecs
 import csv
 import math
 import sqlite3
+import zipfile
 from contextlib import closing
 from datetime import date, datetime
 from functools import partial
@@ -194,6 +195,8 @@ def _load_excel(path: Path, sheet: str | int) -> pd.DataFrame:
             )
     except ImportError as exc:  # pandas picks the reader from the bytes, e.g. a renamed .xls
         raise ValueError(f"{path.name} isn't an .xlsx workbook. Save it as .xlsx or CSV.") from exc
+    except (zipfile.BadZipFile, KeyError) as exc:  # cut-off download, or some other zip
+        raise ValueError(f"{path.name} is damaged or isn't an .xlsx workbook.") from exc
     df = _promote_header(raw)
     return df.infer_objects()
 
