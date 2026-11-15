@@ -255,8 +255,8 @@ def _warn_lost(lost: list[Lost], why: str) -> None:
 def _save(df: pd.DataFrame, output: Path, *, saved: Path | None = None) -> None:
     try:
         save_dataset(df, output)
-    except ValueError as exc:
-        # e.g. SQLite sees "Name" and "name" as the same column.
+    except (ValueError, OSError) as exc:
+        # e.g. SQLite sees "Name" and "name" as the same column, or Excel has the file open.
         _fail(f"{exc}\ntransform -> {saved}" if saved else str(exc))
 
 

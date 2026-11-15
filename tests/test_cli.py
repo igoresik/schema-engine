@@ -311,6 +311,20 @@ def test_write_errors_after_the_model_keep_the_transform(clean_env, monkeypatch,
     assert "transform -> " not in result.stderr
 
 
+def test_output_that_cant_be_written(clean_env, monkeypatch, orders):
+    taken = orders.with_name("taken.csv")
+    taken.mkdir()  # stands in for a file that's open in Excel
+    use_fake(monkeypatch, FakeProvider([GOOD]))
+    result = runner.invoke(app, ["run", str(orders), "x", "-o", str(taken)])
+    assert result.exit_code == 1
+    assert "taken.csv" in result.stderr
+    assert "transform -> " in result.stderr
+    script = str(orders.with_name("dirty_orders_transform.py"))
+    result = runner.invoke(app, ["apply", script, str(orders), "-o", str(taken)])
+    assert result.exit_code == 1
+    assert "taken.csv" in result.stderr
+
+
 LOSSY = """```python
 import pandas as pd
 
