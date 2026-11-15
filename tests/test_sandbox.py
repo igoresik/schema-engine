@@ -41,6 +41,7 @@ def test_clean_code_passes():
         ("from pathlib import Path", "import of 'pathlib'"),
         ("from pandas.io import common", "import of 'pandas.io'"),
         ("from pandas import read_csv", "'read_csv'"),
+        ("from numpy import *", "'from numpy import *'"),
         ("from . import x", "relative imports"),
         ("x = pd.read_csv('a.csv')", "'read_csv'"),
         ("df.to_csv('out.csv')", "'to_csv'"),
