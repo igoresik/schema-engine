@@ -167,9 +167,12 @@ def load_settings(
     timeout = merged_env.get(f"{ENV_PREFIX}TIMEOUT") or file_cfg.get("timeout")
     if timeout:
         try:
-            settings = replace(settings, timeout=float(timeout))
-        except ValueError as exc:
+            seconds = float(timeout)
+        except (TypeError, ValueError) as exc:
             raise ConfigError(f"Invalid timeout '{timeout}'.") from exc
+        if not 0 < seconds < float("inf"):
+            raise ConfigError(f"Invalid timeout '{timeout}'.")
+        settings = replace(settings, timeout=seconds)
     return settings
 
 
