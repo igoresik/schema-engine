@@ -87,6 +87,8 @@ def compile_transform(
     lost fewest is kept, with ``lost`` set.
     Provider errors (bad key, endpoint down) are raised, not retried here.
     """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1.")
     privacy_mode = PrivacyMode(privacy_mode)
     profile = build_profile(df, source=source, privacy_mode=privacy_mode)
     base = build_messages(profile, instruction, preset.rules if preset else "")

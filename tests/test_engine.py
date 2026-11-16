@@ -76,6 +76,13 @@ def test_self_heals_with_the_error(dirty_df):
     assert result.usage == result.attempts[0].usage + result.attempts[1].usage
 
 
+def test_needs_at_least_one_attempt(dirty_df):
+    fake = FakeProvider(["unused"])
+    with pytest.raises(ValueError, match="at least 1"):
+        compile_transform(dirty_df, "anything", fake, max_attempts=0)
+    assert fake.calls == []
+
+
 def test_gives_up_after_max_attempts(dirty_df):
     fake = FakeProvider(["```python\nimport os\ndef transform(df):\n    return df\n```"])
     result = compile_transform(dirty_df, "anything", fake, max_attempts=3)
