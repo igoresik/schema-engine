@@ -129,6 +129,9 @@ def check_shopify(df: pd.DataFrame) -> list[str]:
         if c not in SHOPIFY_COLUMNS
     ]
     problems += [f"missing column '{c}'" for c in ("Title", "URL handle") if c not in columns]
+    problems += [
+        f"'{c}' appears more than once" for c in dict.fromkeys(columns) if columns.count(c) > 1
+    ]
     if problems:
         return problems
 

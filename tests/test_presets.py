@@ -122,3 +122,9 @@ def test_sqlite_names():
     assert preset.suffix == ".sql"
     assert preset.fit(df)[0] is df
     assert "order_date" in preset.rules
+
+
+def test_repeated_column_is_a_problem():
+    df = shopify_rows()
+    df.columns = [*df.columns[:2], "Title", *df.columns[3:]]
+    assert check_shopify(df) == ["'Title' appears more than once"]
