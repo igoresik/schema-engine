@@ -94,6 +94,11 @@ def test_timeout_from_env_and_file(tmp_path):
     assert settings_from(tmp_path, config={"timeout": 12}).timeout == 12.0
     with pytest.raises(ConfigError, match="Invalid timeout"):
         settings_from(tmp_path, env={"SCHEMA_ENGINE_TIMEOUT": "soon"})
+    for bad in ("0", "-5", "nan", "inf"):
+        with pytest.raises(ConfigError, match="Invalid timeout"):
+            settings_from(tmp_path, env={"SCHEMA_ENGINE_TIMEOUT": bad})
+    with pytest.raises(ConfigError, match="Invalid timeout"):
+        settings_from(tmp_path, config={"timeout": [5]})
 
 
 def test_unknown_provider(tmp_path):
