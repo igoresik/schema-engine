@@ -3,7 +3,10 @@
 The goal is to hand the transform step the data as it really is. Headers are
 kept verbatim (including duplicates and blanks, which pandas would otherwise
 rename), CSV cells stay as text so leading zeros and odd formats survive, and
-only truly empty cells become nulls. Placeholder strings like ``N/A`` are left
+only truly empty cells become nulls. In Excel files, text cells stay text, so
+``00123`` survives. A number cell can't: Excel stores 123 and only displays the
+zeros, so a whole-number column formatted ``00000`` is read back as that text, and
+other numeric columns stay numeric. Placeholder strings like ``N/A`` are left
 alone and reported by the profiler instead.
 """
 
@@ -12,6 +15,7 @@ from __future__ import annotations
 import codecs
 import csv
 import math
+import re
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -21,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+import openpyxl
 import pandas as pd
 
 if TYPE_CHECKING:
@@ -198,7 +203,54 @@ def _load_excel(path: Path, sheet: str | int) -> pd.DataFrame:
     except (zipfile.BadZipFile, KeyError) as exc:  # cut-off download, or some other zip
         raise ValueError(f"{path.name} is damaged or isn't an .xlsx workbook.") from exc
     df = _promote_header(raw)
+    _pad_zero_formatted(path, sheet, df)
     return df.infer_objects()
+
+
+_ZERO_FORMAT = re.compile(r"0{2,}")
+
+
+def _pad_zero_formatted(path: Path, sheet: str | int, df: pd.DataFrame) -> None:
+    """Give whole-number columns shown as ``00000`` back their zeros, as text, in place.
+
+    Typing ``00123`` into a cell formatted ``00000`` stores the number 123 and only
+    displays the zeros, so the file itself has lost them. When every filled cell in a
+    column is a whole number with an all-zeros format, the column is an ID or ZIP code
+    and is read as the text Excel shows. Plain numeric columns and any other number
+    format stay numeric.
+    """
+    if df.empty:
+        return
+    try:
+        book = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    except Exception:  # pandas could read it; the zeros are a bonus, so never fail the load over them
+        return
+    with closing(book):
+        if isinstance(sheet, str):
+            ws = book[sheet]
+        else:
+            ws = book.worksheets[sheet]
+        rows = list(ws.iter_rows())[1:]
+    for j, name in enumerate(df.columns):
+        cells = [r[j] for r in rows if j < len(r) and r[j].value not in (None, "")]
+        if cells and all(_is_zero_padded(c) for c in cells):
+            padded = {i: f"{int(c.value):0{len(c.number_format)}d}" for i, c in zip(_filled(df[name]), cells)}
+            df[name] = pd.Series([padded.get(i) for i in range(len(df))], index=df.index, dtype=object)
+
+
+def _is_zero_padded(cell) -> bool:
+    v = cell.value
+    return (
+        isinstance(v, (int, float))
+        and not isinstance(v, bool)
+        and v >= 0
+        and v == int(v)
+        and bool(_ZERO_FORMAT.fullmatch(cell.number_format))
+    )
+
+
+def _filled(column: pd.Series) -> list[int]:
+    return [i for i, v in enumerate(column) if not pd.isna(v)]
 
 
 def _sniff_delimiter(sample: str, suffix: str) -> str:

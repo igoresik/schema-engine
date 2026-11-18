@@ -55,6 +55,24 @@ def test_tsv(tmp_path):
     assert list(load_dataset(path).columns) == ["a", "b"]
 
 
+def test_excel_keeps_text_zeros_and_zero_formatted_numbers(tmp_path):
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["id", "zip", "qty", "price"])
+    for i, (ident, zipcode) in enumerate([("00123", 12), ("00456", 34), ("007", 5)]):
+        ws.append([ident, zipcode, i + 1, 9.5 + i])
+        ws.cell(row=i + 2, column=2).number_format = "00000"
+    path = tmp_path / "ids.xlsx"
+    wb.save(path)
+    df = load_dataset(path)
+    assert df["id"].tolist() == ["00123", "00456", "007"]  # text cells
+    assert df["zip"].tolist() == ["00012", "00034", "00005"]  # numbers shown as 00000
+    assert pd.api.types.is_integer_dtype(df["qty"])
+    assert pd.api.types.is_float_dtype(df["price"])
+
+
 def test_excel_types_inferred(tmp_path):
     path = tmp_path / "d.xlsx"
     pd.DataFrame({"n": [1, 2], "when": pd.to_datetime(["2024-01-01", "2024-01-02"])}).to_excel(
