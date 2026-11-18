@@ -64,6 +64,19 @@ def test_profile_unreadable_file(tmp_path, name, content, message):
     assert message in result.stderr
 
 
+def test_a_file_that_cant_be_opened_gets_a_plain_message(tmp_path, monkeypatch):
+    path = tmp_path / "locked.csv"
+    path.write_text("a,b\n1,2\n")
+
+    def locked(*args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("schema_engine.cli.load_dataset", locked)
+    result = runner.invoke(app, ["profile", str(path)])
+    assert result.exit_code == 2
+    assert "Can't read 'locked.csv': Permission denied" in result.stderr
+
+
 @pytest.fixture
 def clean_env(tmp_path, monkeypatch):
     """No real keys, .env or user config leak into test-connection tests."""

@@ -267,6 +267,8 @@ def _load(path: Path, sheet: str) -> pd.DataFrame:
         return load_dataset(path, sheet=sheet)
     except ValueError as exc:  # UnsupportedFormatError, empty CSV, broken workbook
         _fail(str(exc), code=2)
+    except OSError as exc:  # no permission, a locked file, a folder
+        _fail(f"Can't read '{path.name}': {exc.strerror or exc}", code=2)
 
 
 def _fail(message: str, *, code: int = 1) -> NoReturn:
