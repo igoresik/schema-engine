@@ -172,10 +172,14 @@ def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> Sand
         return SandboxResult(None, error[-ERROR_LIMIT:])
 
 
-def _start(command: list[str], work: Path, env: dict[str, str], timeout: float, jailed: bool) -> tuple[int, str]:
-    """Run the child, in the jail where there is one. Returns (exit code, what it wrote to stderr)."""
+def _start(
+    command: list[str], work: Path, env: dict[str, str], timeout: float, jailed: bool
+) -> tuple[int, str]:
+    """Run the child, in the jail where there is one. Returns (exit code, its stderr)."""
     if not jailed:
-        proc = subprocess.run(command, cwd=work, env=env, timeout=timeout, capture_output=True, text=True)
+        proc = subprocess.run(
+            command, cwd=work, env=env, timeout=timeout, capture_output=True, text=True
+        )
         return proc.returncode, proc.stderr
     with open(work / "stdout.txt", "wb") as out, open(work / "stderr.txt", "wb") as err:
         code = _jail.run(command, cwd=work, env=env, timeout=timeout, stdout=out, stderr=err)
