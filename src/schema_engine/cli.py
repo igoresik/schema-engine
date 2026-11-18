@@ -159,6 +159,7 @@ def run(
     output = output or default_output(path, target)
     save = save or path.with_name(f"{path.stem}_transform.py")
     _check_writable(output, target)
+    _check_not_the_input(path, output=output, transform=save)
     df = _load(path, sheet)
     try:
         settings = load_settings(provider=provider, model=model, base_url=base_url)
@@ -230,6 +231,7 @@ def apply(
     target = _preset(preset)
     output = output or default_output(path, target)
     _check_writable(output, target)
+    _check_not_the_input(path, output=output)
     df = _load(path, sheet)
     result = run_transform(script.read_text(encoding="utf-8"), df, timeout=timeout)
     if result.output is None:
@@ -287,6 +289,17 @@ def _check_writable(output: Path, target: ExportPreset | None = None) -> None:
         _fail(f"The {target.name} preset writes {target.suffix} files, not '{suffix}'.", code=2)
     if suffix not in WRITE_SUFFIXES:
         _fail(f"Can't write '{output.suffix}' files. Use .csv, .tsv, .xlsx or .sql.", code=2)
+
+
+def _check_not_the_input(path: Path, **outputs: Path) -> None:
+    """Fail before a model call or a save that would overwrite the data being cleaned, or each other."""
+    names = {"input": path, **outputs}
+    seen: dict[Path, str] = {}
+    for label, file in names.items():
+        where = file.resolve()
+        if where in seen:
+            _fail(f"The {label} file can't be the same as the {seen[where]} file: {file}", code=2)
+        seen[where] = label
 
 
 def _last_line(error: str) -> str:

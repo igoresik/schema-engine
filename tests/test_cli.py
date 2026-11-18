@@ -160,6 +160,33 @@ def test_run_then_apply_without_the_model(clean_env, monkeypatch, orders):
     assert as_text(load_dataset(again)) == as_text(cleaned)
 
 
+@pytest.mark.parametrize("flag", ["-o", "--save"])
+def test_run_refuses_to_overwrite_the_input(clean_env, monkeypatch, orders, flag):
+    use_fake(monkeypatch, FakeProvider([GOOD]))
+    before = orders.read_bytes()
+    result = runner.invoke(app, ["run", str(orders), "x", flag, str(orders)])
+    assert result.exit_code == 2
+    assert "can't be the same" in result.stderr
+    assert orders.read_bytes() == before
+
+
+def test_run_refuses_the_same_file_for_data_and_transform(clean_env, monkeypatch, orders):
+    use_fake(monkeypatch, FakeProvider([GOOD]))
+    both = orders.parent / "both.csv"
+    result = runner.invoke(app, ["run", str(orders), "x", "-o", str(both), "--save", str(both)])
+    assert result.exit_code == 2
+    assert not both.exists()
+
+
+def test_apply_refuses_to_overwrite_the_input(clean_env, monkeypatch, orders):
+    script = orders.with_name("t.py")
+    script.write_text(GOOD.removeprefix("```python\n").removesuffix("\n```"), encoding="utf-8")
+    before = orders.read_bytes()
+    result = runner.invoke(app, ["apply", str(script), str(orders), "-o", str(orders)])
+    assert result.exit_code == 2
+    assert orders.read_bytes() == before
+
+
 def test_run_retries_and_custom_paths(clean_env, monkeypatch, orders):
     broken = "```python\ndef transform(df):\n    return df[['nope']]\n```"
     use_fake(monkeypatch, FakeProvider([broken, GOOD]))
