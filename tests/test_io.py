@@ -1,3 +1,4 @@
+import codecs
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -71,6 +72,23 @@ def test_excel_keeps_text_zeros_and_zero_formatted_numbers(tmp_path):
     assert df["zip"].tolist() == ["00012", "00034", "00005"]  # numbers shown as 00000
     assert pd.api.types.is_integer_dtype(df["qty"])
     assert pd.api.types.is_float_dtype(df["price"])
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".tsv"])
+def test_csv_and_tsv_are_written_with_a_bom_and_read_back_the_same(tmp_path, suffix):
+    df = pd.DataFrame(
+        {
+            "Nom": ["José", "Zoë", "Ünal"],
+            "Ville": ["Málaga", "Besançon", "Köln"],
+            "Zip": ["00123", "04", "99"],
+        }
+    )
+    path = tmp_path / f"out{suffix}"
+    save_dataset(df, path)
+    assert path.read_bytes().startswith(codecs.BOM_UTF8)
+    back = load_dataset(path)
+    assert list(back.columns) == list(df.columns)
+    assert back.to_dict("list") == df.to_dict("list")
 
 
 def test_excel_types_inferred(tmp_path):
