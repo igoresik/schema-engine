@@ -296,8 +296,16 @@ Generated code never runs inside the engine itself.
 3. **Checked after it runs.** The code must return a table with unique, non-empty column
    names. Results come back as JSON.
 
-This catches careless or buggy code. It is not a locked-down container or VM, so don't
-use it to run code you would never trust.
+**On Windows the process also runs in a jail.** It gets a restricted, Low-integrity
+token, so Windows refuses its writes and deletes outside its own work folder. A Job Object
+stops it from starting other programs, caps its memory at 2 GB and ends it if the app
+closes. Even code that slips past the check can't change or delete your files or run
+`os.system`. It can still read files and open network connections, since only the
+check and a socket patch stand in the way of those. Set `SCHEMA_ENGINE_NO_JAIL=1` to
+turn the jail off. Other systems have no jail.
+
+This catches careless or buggy code and limits the damage from bad code on Windows. It
+is not a locked-down container or VM, so don't use it to run code you would never trust.
 
 ## How well it works
 
