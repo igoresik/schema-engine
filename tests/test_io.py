@@ -58,7 +58,13 @@ def test_tsv(tmp_path):
 
 @pytest.mark.parametrize("suffix", [".csv", ".tsv"])
 def test_csv_and_tsv_are_written_with_a_bom_and_read_back_the_same(tmp_path, suffix):
-    df = pd.DataFrame({"Nom": ["José", "Zoë", "Ünal"], "Ville": ["Málaga", "Besançon", "Köln"], "Zip": ["00123", "04", "99"]})
+    df = pd.DataFrame(
+        {
+            "Nom": ["José", "Zoë", "Ünal"],
+            "Ville": ["Málaga", "Besançon", "Köln"],
+            "Zip": ["00123", "04", "99"],
+        }
+    )
     path = tmp_path / f"out{suffix}"
     save_dataset(df, path)
     assert path.read_bytes().startswith(codecs.BOM_UTF8)
