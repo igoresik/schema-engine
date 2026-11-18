@@ -223,19 +223,23 @@ def _pad_zero_formatted(path: Path, sheet: str | int, df: pd.DataFrame) -> None:
         return
     try:
         book = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    except Exception:  # pandas could read it; the zeros are a bonus, so never fail the load over them
+    except (
+        Exception
+    ):  # pandas could read it; the zeros are a bonus, so never fail the load over them
         return
     with closing(book):
-        if isinstance(sheet, str):
-            ws = book[sheet]
-        else:
-            ws = book.worksheets[sheet]
+        ws = book[sheet] if isinstance(sheet, str) else book.worksheets[sheet]
         rows = list(ws.iter_rows())[1:]
     for j, name in enumerate(df.columns):
         cells = [r[j] for r in rows if j < len(r) and r[j].value not in (None, "")]
         if cells and all(_is_zero_padded(c) for c in cells):
-            padded = {i: f"{int(c.value):0{len(c.number_format)}d}" for i, c in zip(_filled(df[name]), cells)}
-            df[name] = pd.Series([padded.get(i) for i in range(len(df))], index=df.index, dtype=object)
+            padded = {
+                i: f"{int(c.value):0{len(c.number_format)}d}"
+                for i, c in zip(_filled(df[name]), cells, strict=False)
+            }
+            df[name] = pd.Series(
+                [padded.get(i) for i in range(len(df))], index=df.index, dtype=object
+            )
 
 
 def _is_zero_padded(cell) -> bool:
