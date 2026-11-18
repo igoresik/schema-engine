@@ -147,6 +147,7 @@ def test_run_transform_timeout(dirty_df):
 
 def test_child_gets_no_api_keys_and_crashes_are_reported(monkeypatch, dirty_df):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-should-not-leak")
+    monkeypatch.setenv("SCHEMA_ENGINE_NO_JAIL", "1")  # this test is about the plain child process
     seen = {}
 
     def fake_run(args, **kwargs):
@@ -262,3 +263,48 @@ def test_plain_dates_stay_dates(dirty_df):
     assert result.error is None
     assert result.output["d"].tolist()[0] == "2024-01-05"
     assert result.output["d"].isna().tolist() == [False, True]
+
+
+# the jail (Windows only): these run code that the static check lets through on purpose
+
+needs_jail = pytest.mark.skipif(sys.platform != "win32", reason="the jail is Windows only")
+
+
+def _escape(body: str) -> str:
+    # pd.compat.sys reaches the modules the static check blocks by name
+    return f"import pandas as pd\n\n\ndef transform(df):\n    sys = pd.compat.sys\n{body}\n    return df\n"
+
+
+@needs_jail
+def test_jailed_code_cannot_delete_your_files(tmp_path, dirty_df):
+    precious = tmp_path / "precious.txt"
+    precious.write_text("keep me")
+    code = _escape(f"    sys.modules['os'].remove({str(precious)!r})")
+    result = run_transform(code, dirty_df)
+    assert result.error and "PermissionError" in result.error
+    assert precious.read_text() == "keep me"
+
+
+@needs_jail
+def test_jailed_code_cannot_change_your_files(tmp_path, dirty_df):
+    precious = tmp_path / "precious.txt"
+    precious.write_text("keep me")
+    code = _escape(f"    sys.modules['io'].open({str(precious)!r}, 'w').write('gone')")
+    result = run_transform(code, dirty_df)
+    assert result.error and "PermissionError" in result.error
+    assert precious.read_text() == "keep me"
+
+
+@needs_jail
+def test_jailed_code_cannot_start_programs(tmp_path, dirty_df):
+    marker = tmp_path / "marker.txt"
+    command = f'cmd /c echo hi > "{marker}"'
+    code = _escape(f"    sys.modules['os'].system({command!r})")
+    run_transform(code, dirty_df)
+    assert not marker.exists()
+
+
+@needs_jail
+def test_a_jailed_transform_still_works_and_its_output_comes_back(dirty_df):
+    result = run_transform("def transform(df):\n    return df.iloc[:, :2]\n", dirty_df)
+    assert result.ok and list(result.output.columns) == list(dirty_df.columns[:2])

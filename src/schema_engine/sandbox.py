@@ -7,8 +7,10 @@ Two layers stand between model output and your machine:
 2. A separate Python process with a timeout and no API keys in its environment,
    where file and network access are blocked while the transform runs.
 
-This stops careless or buggy code. It is not a hard security boundary like a
-container or VM.
+On Windows the child also runs in a jail (see ``_jail``): a Low-integrity token that can't
+write or delete your files, and a Job Object that blocks new processes and caps memory.
+Reading files and network connections are still possible there, and the other systems have
+no jail at all, so this is still not a container or VM.
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ from io import StringIO
 from pathlib import Path
 
 import pandas as pd
+
+from schema_engine import _jail
 
 ALLOWED_IMPORTS = frozenset(
     {
@@ -136,22 +140,23 @@ def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> Sand
 
     with tempfile.TemporaryDirectory(prefix="schema-engine-") as tmp:
         work = Path(tmp)
-        df.to_pickle(work / "input.pkl")
-        (work / "transform.py").write_text(code, encoding="utf-8")
-        env = {k: os.environ[k] for k in _CHILD_ENV if k in os.environ}
+        jailed = _jail.WINDOWS and not os.environ.get("SCHEMA_ENGINE_NO_JAIL")
         try:
-            proc = subprocess.run(
-                child_command(work),
-                cwd=work,
-                env=env,
-                timeout=timeout,
-                capture_output=True,
-                text=True,
-            )
+            if jailed:
+                _jail.mark_low(work)  # before any file goes in, so they all inherit the Low label
+            df.to_pickle(work / "input.pkl")
+            (work / "transform.py").write_text(code, encoding="utf-8")
+            env = {k: os.environ[k] for k in _CHILD_ENV if k in os.environ}
+            returncode, stderr = _start(child_command(work), work, env, timeout, jailed)
         except subprocess.TimeoutExpired:
             return SandboxResult(None, f"TimeoutError: transform ran longer than {timeout:g}s")
-        if proc.returncode == 0:
-            text = (work / "output.json").read_text(encoding="utf-8")
+        except _jail.JailError as exc:
+            return SandboxResult(None, f"The sandbox could not start, so nothing was run: {exc}")
+        if returncode == 0:
+            output_file = work / "output.json"
+            if not output_file.exists():
+                return SandboxResult(None, "The transform finished without writing any output.")
+            text = output_file.read_text(encoding="utf-8")
             try:
                 return SandboxResult(pd.read_json(StringIO(text), orient="table"))
             except (ValueError, OverflowError, NotImplementedError) as exc:
@@ -163,8 +168,18 @@ def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> Sand
         if error_file.exists():
             error = error_file.read_text(encoding="utf-8")
         else:
-            error = proc.stderr.strip() or f"sandbox exited with code {proc.returncode}"
+            error = stderr.strip() or f"sandbox exited with code {returncode}"
         return SandboxResult(None, error[-ERROR_LIMIT:])
+
+
+def _start(command: list[str], work: Path, env: dict[str, str], timeout: float, jailed: bool) -> tuple[int, str]:
+    """Run the child, in the jail where there is one. Returns (exit code, what it wrote to stderr)."""
+    if not jailed:
+        proc = subprocess.run(command, cwd=work, env=env, timeout=timeout, capture_output=True, text=True)
+        return proc.returncode, proc.stderr
+    with open(work / "stdout.txt", "wb") as out, open(work / "stderr.txt", "wb") as err:
+        code = _jail.run(command, cwd=work, env=env, timeout=timeout, stdout=out, stderr=err)
+    return code, (work / "stderr.txt").read_text(encoding="utf-8", errors="replace")
 
 
 def child_command(work: Path) -> list[str]:
