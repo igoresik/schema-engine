@@ -294,7 +294,7 @@ def _check_writable(output: Path, target: ExportPreset | None = None) -> None:
 
 
 def _check_not_the_input(path: Path, **outputs: Path) -> None:
-    """Fail before a model call or a save that would overwrite the data being cleaned, or each other."""
+    """Fail before a model call or save that would overwrite the input or each other."""
     names = {"input": path, **outputs}
     seen: dict[Path, str] = {}
     for label, file in names.items():

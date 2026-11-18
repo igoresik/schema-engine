@@ -272,7 +272,8 @@ needs_jail = pytest.mark.skipif(sys.platform != "win32", reason="the jail is Win
 
 def _escape(body: str) -> str:
     # pd.compat.sys reaches the modules the static check blocks by name
-    return f"import pandas as pd\n\n\ndef transform(df):\n    sys = pd.compat.sys\n{body}\n    return df\n"
+    head = "import pandas as pd\n\n\ndef transform(df):\n    sys = pd.compat.sys\n"
+    return f"{head}{body}\n    return df\n"
 
 
 @needs_jail
