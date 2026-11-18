@@ -1,3 +1,4 @@
+import codecs
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -53,6 +54,23 @@ def test_tsv(tmp_path):
     path = tmp_path / "c.tsv"
     path.write_text("a\tb\n1\t2\n")
     assert list(load_dataset(path).columns) == ["a", "b"]
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".tsv"])
+def test_csv_and_tsv_are_written_with_a_bom_and_read_back_the_same(tmp_path, suffix):
+    df = pd.DataFrame(
+        {
+            "Nom": ["José", "Zoë", "Ünal"],
+            "Ville": ["Málaga", "Besançon", "Köln"],
+            "Zip": ["00123", "04", "99"],
+        }
+    )
+    path = tmp_path / f"out{suffix}"
+    save_dataset(df, path)
+    assert path.read_bytes().startswith(codecs.BOM_UTF8)
+    back = load_dataset(path)
+    assert list(back.columns) == list(df.columns)
+    assert back.to_dict("list") == df.to_dict("list")
 
 
 def test_excel_types_inferred(tmp_path):

@@ -145,7 +145,7 @@ printed as it happens, plus a total at the end.
 
 When a try works, `run` writes two files next to the input:
 
-- `NAME_clean.csv` (or `.tsv` / `.xlsx`, matching the input): the cleaned data. Change it
+- `NAME_clean.csv` (or `.tsv` / `.xlsx`, matching the input): the cleaned data. CSV and TSV are written as UTF-8 with a byte order mark, so Excel on Windows shows accents correctly. Change it
   with `-o`, which also takes `.sql` (see [SQLite output](#sqlite-output)).
 - `NAME_transform.py`: the generated code, with a header saying which model wrote it and
   how many tokens it took. Change it with `--save`.

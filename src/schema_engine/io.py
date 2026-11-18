@@ -62,7 +62,9 @@ def save_dataset(df: pd.DataFrame, path: str | Path) -> None:
     elif suffix == ".sql":
         path.write_text(script, encoding="utf-8")
     else:
-        df.to_csv(path, index=False, sep="	" if suffix == ".tsv" else ",")
+        # the BOM is what makes Excel on Windows read accents as UTF-8
+        encoding = "utf-8-sig" if suffix in {".csv", ".tsv"} else "utf-8"
+        df.to_csv(path, index=False, sep="	" if suffix == ".tsv" else ",", encoding=encoding)
 
 
 def default_output(path: Path, target: ExportPreset | None = None) -> Path:
