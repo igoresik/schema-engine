@@ -158,7 +158,10 @@ def run_transform(code: str, df: pd.DataFrame, *, timeout: float = 30.0) -> Sand
                 return SandboxResult(None, "The transform finished without writing any output.")
             text = output_file.read_text(encoding="utf-8")
             try:
-                return SandboxResult(pd.read_json(StringIO(text), orient="table"))
+                # precise_float: the default parser changes the last digits,
+                # 1.234567e-05 would come back as 1.2345669999999999e-05
+                output = pd.read_json(StringIO(text), orient="table", precise_float=True)
+                return SandboxResult(output)
             except (ValueError, OverflowError, NotImplementedError) as exc:
                 # Read back as nanoseconds, so dates outside 1677-2262 fail here.
                 # Timedeltas can't be read back from this JSON at all.

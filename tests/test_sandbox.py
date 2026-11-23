@@ -266,6 +266,17 @@ def test_plain_dates_stay_dates(dirty_df):
     assert result.output["d"].isna().tolist() == [False, True]
 
 
+def test_small_decimals_survive_the_trip_back_into_pandas(dirty_df):
+    code = (
+        "import pandas as pd\n"
+        "def transform(df):\n"
+        "    return pd.DataFrame({'p': [0.00001234567, 0.3333333333333, 1.5e-11, 0.1 + 0.2]})\n"
+    )
+    result = run_transform(code, dirty_df)
+    assert result.error is None
+    assert result.output["p"].tolist() == [0.00001234567, 0.3333333333333, 0.000000000015, 0.3]
+
+
 def test_small_decimals_come_back_unchanged(tmp_path):
     code = (
         "import pandas as pd\n"

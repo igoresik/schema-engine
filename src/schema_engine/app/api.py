@@ -468,7 +468,7 @@ def table(df: pd.DataFrame, rows: int = PREVIEW_ROWS) -> dict[str, Any]:
             head.isetitem(
                 position, column.dt.strftime("%Y-%m-%d" if dates else "%Y-%m-%d %H:%M:%S")
             )
-    data = json.loads(head.to_json(orient="values", default_handler=str))
+    data = json.loads(head.to_json(orient="values", default_handler=str, double_precision=15))
     return {"columns": [str(c) for c in df.columns], "rows": data, "total": len(df)}
 
 
