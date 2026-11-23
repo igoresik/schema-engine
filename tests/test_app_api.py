@@ -370,3 +370,8 @@ def test_serves_the_built_ui(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "STATIC", tmp_path)
     client = make_client(tmp_path)
     assert client.get("/").text == "<p>ui</p>"
+
+
+def test_the_preview_keeps_small_decimals():
+    df = pd.DataFrame({"p": [0.000000000015, 0.3333333333333]})
+    assert api.table(df)["rows"] == [[0.000000000015], [0.3333333333333]]
