@@ -38,7 +38,11 @@ def main(workdir: Path) -> int:
         (workdir / "error.txt").write_text(_format_error(exc), encoding="utf-8")
         return 1
     _plain_dates(result).reset_index(drop=True).to_json(
-        workdir / "output.json", orient="table", index=False, date_format="iso"
+        workdir / "output.json",
+        orient="table",
+        index=False,
+        date_format="iso",
+        double_precision=15,  # the default 10 turns 1.5e-11 into 0.0
     )
     return 0
 

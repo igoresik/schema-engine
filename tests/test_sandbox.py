@@ -1,4 +1,5 @@
 import builtins
+import json
 import socket
 import subprocess
 import sys
@@ -263,6 +264,18 @@ def test_plain_dates_stay_dates(dirty_df):
     assert result.error is None
     assert result.output["d"].tolist()[0] == "2024-01-05"
     assert result.output["d"].isna().tolist() == [False, True]
+
+
+def test_small_decimals_come_back_unchanged(tmp_path):
+    code = (
+        "import pandas as pd\n"
+        "def transform(df):\n"
+        "    return pd.DataFrame({'p': [0.00001234567, 0.3333333333333, 0.000000000015]})\n"
+    )
+    rc, error = run_in_process(tmp_path, code)
+    assert (rc, error) == (0, None)
+    data = json.loads((tmp_path / "output.json").read_text(encoding="utf-8"))["data"]
+    assert [row["p"] for row in data] == [0.00001234567, 0.3333333333333, 0.000000000015]
 
 
 # the jail (Windows only): these run code that the static check lets through on purpose
