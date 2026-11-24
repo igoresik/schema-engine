@@ -58,6 +58,11 @@ def test_clean_code_passes():
         ("__import__('os')", "'__import__'"),
         ("().__class__.__bases__", "'__class__'"),
         ("x = __builtins__", "'__builtins__'"),
+        ("import string\nstring.Formatter()", "'Formatter'"),
+        ("from string import Formatter", "'Formatter'"),
+        ("import string\nf = string.Formatter\nf.get_field", "'get_field'"),
+        ("import string\nstring.Formatter.get_value", "'get_value'"),
+        ("import string\nstring.Formatter.vformat", "'vformat'"),
     ],
 )
 def test_blocked_code(code, problem):
