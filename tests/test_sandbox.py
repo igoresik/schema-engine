@@ -368,3 +368,38 @@ def test_the_audit_layer_still_lets_imports_work():
     with _runner._locked_down():
         module = importlib.import_module("pandas.tseries.holiday")
     assert module.__name__ == "pandas.tseries.holiday"
+
+
+def test_time_zone_files_can_be_read_but_nothing_else_while_a_transform_runs(tmp_path, monkeypatch):
+    import zoneinfo
+
+    zones = tmp_path / "zoneinfo"
+    zones.mkdir()
+    (zones / "Somewhere").write_bytes(b"zone")
+    (tmp_path / "other.txt").write_text("private", encoding="utf-8")
+    monkeypatch.setattr(zoneinfo, "TZPATH", (str(zones),))
+    with _runner._locked_down():
+        guarded = builtins.open  # what zoneinfo calls while a transform runs
+        with guarded(zones / "Somewhere", "rb") as handle:
+            assert handle.read() == b"zone"
+        with pytest.raises(PermissionError):
+            guarded(zones / "Somewhere", "wb")
+        with pytest.raises(PermissionError):
+            guarded(zones / ".." / "other.txt", "rb")
+        with pytest.raises(PermissionError):
+            guarded(tmp_path / "other.txt", "rb")
+
+
+def test_a_transform_that_localizes_dates_runs_in_the_child(dirty_df):
+    code = (
+        "import pandas as pd\n"
+        "def transform(df):\n"
+        "    when = pd.to_datetime(pd.Series(['2026-07-01 12:00', '2026-01-01 12:00']))\n"
+        "    return pd.DataFrame({'when': when.dt.tz_localize('Europe/Lisbon').astype(str)})\n"
+    )
+    result = run_transform(code, dirty_df)
+    assert result.error is None
+    assert result.output["when"].tolist() == [
+        "2026-07-01 12:00:00+01:00",
+        "2026-01-01 12:00:00+00:00",
+    ]
