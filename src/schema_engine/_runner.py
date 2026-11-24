@@ -12,7 +12,6 @@ import os
 import socket
 import sys
 import traceback
-import zoneinfo
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
@@ -126,14 +125,14 @@ def _install_audit() -> None:
     if _audit["installed"]:
         return
     paths = {sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix, *sys.path}
-    paths |= {*zoneinfo.TZPATH, getattr(sys, "_MEIPASS", ""), os.path.dirname(sys.executable)}
+    paths |= {getattr(sys, "_MEIPASS", ""), os.path.dirname(sys.executable)}
     _audit["roots"] = tuple({os.path.normcase(os.path.realpath(p)) for p in paths if p})
     sys.addaudithook(_audit_hook)
     _audit["installed"] = True
 
 
 def _readable(path: object) -> bool:
-    """Python's own files and time zone data, which imports and dates need during a transform."""
+    """Python's own files, which imports need while a transform runs."""
     if isinstance(path, int):  # an already open descriptor
         return True
     try:
