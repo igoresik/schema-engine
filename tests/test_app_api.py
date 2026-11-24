@@ -394,4 +394,7 @@ def test_transform_files_that_cant_be_saved_or_read_are_a_400(tmp_path, data_dir
     assert missing.status_code == 400
     binary = tmp_path / "bin.py"
     binary.write_bytes(b"\xff\xfe\x00\x80")
-    assert client.post("/api/apply", json={"file": opened["id"], "path": str(binary)}).status_code == 400
+    assert (
+        client.post("/api/apply", json={"file": opened["id"], "path": str(binary)}).status_code
+        == 400
+    )
