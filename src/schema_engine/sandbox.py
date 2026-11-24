@@ -74,8 +74,11 @@ BLOCKED_ATTRIBUTES = frozenset(
         "eval",
         "ExcelFile",
         "ExcelWriter",
+        "Formatter",
         "fromfile",
         "genfromtxt",
+        "get_field",
+        "get_value",
         "HDFStore",
         "io",
         "lib",
@@ -88,6 +91,7 @@ BLOCKED_ATTRIBUTES = frozenset(
         "savez",
         "savez_compressed",
         "tofile",
+        "vformat",
     }
 )
 
