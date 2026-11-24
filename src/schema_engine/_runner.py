@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import builtins
 import linecache
+import os
 import socket
 import sys
 import traceback
@@ -22,6 +23,34 @@ from schema_engine.sandbox import ALLOWED_IMPORTS
 
 GENERATED = "generated_transform"
 FILENAME = "transform.py"
+
+# Audit events that generated code may never trigger, however it got there: starting
+# programs, sockets, native code, and changing the file system.
+_DENIED_EVENTS = (
+    "socket.",
+    "subprocess.",
+    "ctypes.",
+    "shutil.",
+    "glob.",
+    "os.exec",
+    "os.spawn",
+    "os.posix_spawn",
+    "os.fork",
+    "os.system",
+    "os.startfile",
+    "os.remove",
+    "os.rename",
+    "os.replace",
+    "os.mkdir",
+    "os.rmdir",
+    "os.chmod",
+    "os.chown",
+    "os.truncate",
+    "os.link",
+    "os.symlink",
+)
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
+_audit = {"on": False, "busy": False, "installed": False, "roots": ()}
 
 
 def main(workdir: Path) -> int:
@@ -51,6 +80,7 @@ def main(workdir: Path) -> int:
 def _locked_down() -> Iterator[None]:
     """Block files, network and non-allowlisted imports while generated code runs."""
     real_import, real_open = builtins.__import__, builtins.open
+    _install_audit()
     targets = [
         (socket, "create_connection"),
         (socket, "getaddrinfo"),
@@ -74,12 +104,68 @@ def _locked_down() -> Iterator[None]:
     builtins.open = blocked
     for obj, name, _ in saved:
         setattr(obj, name, blocked)
+    _audit["on"] = True
     try:
         yield
     finally:
+        _audit["on"] = False
         builtins.__import__, builtins.open = real_import, real_open
         for obj, name, value in saved:
             setattr(obj, name, value)
+
+
+def _install_audit() -> None:
+    """Add the audit hook once; it can't be removed, so it only acts while ``_audit["on"]``.
+
+    The patches above only cover the names a transform can reach directly. Python itself
+    reports every file, process and socket operation as an audit event, whichever module
+    it came through, so this closes the routes that get around the patches (io.open,
+    os.system and the like).
+    """
+    if _audit["installed"]:
+        return
+    paths = {sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix, *sys.path}
+    paths |= {getattr(sys, "_MEIPASS", ""), os.path.dirname(sys.executable)}
+    _audit["roots"] = tuple({os.path.normcase(os.path.realpath(p)) for p in paths if p})
+    sys.addaudithook(_audit_hook)
+    _audit["installed"] = True
+
+
+def _readable(path: object) -> bool:
+    """Python's own files, which imports need while a transform runs."""
+    if isinstance(path, int):  # an already open descriptor
+        return True
+    try:
+        real = os.path.normcase(os.path.realpath(os.fsdecode(path)))
+    except (TypeError, ValueError, OSError):
+        return False
+    return any(real == root or real.startswith(root + os.sep) for root in _audit["roots"])
+
+
+def _listable(path: object) -> bool:
+    return path is None or _readable(
+        path
+    )  # None is the current directory, which is the work folder
+
+
+def _audit_hook(event: str, args: tuple) -> None:
+    if not _audit["on"] or _audit["busy"]:
+        return
+    _audit["busy"] = True
+    try:
+        if event.startswith(_DENIED_EVENTS):
+            raise PermissionError(f"{event} is blocked in the sandbox")
+        if event == "open":
+            path, mode, flags = args
+            writing = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (
+                isinstance(flags, int) and flags & _WRITE_FLAGS
+            )
+            if writing or not _readable(path):
+                raise PermissionError("file access is blocked in the sandbox")
+        elif event in ("os.listdir", "os.scandir") and not _listable(args[0]):
+            raise PermissionError("file access is blocked in the sandbox")
+    finally:
+        _audit["busy"] = False
 
 
 def _allowed_at_runtime(name: str) -> bool:

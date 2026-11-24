@@ -338,3 +338,33 @@ def test_jailed_code_cannot_start_programs(tmp_path, dirty_df):
 def test_a_jailed_transform_still_works_and_its_output_comes_back(dirty_df):
     result = run_transform("def transform(df):\n    return df.iloc[:, :2]\n", dirty_df)
     assert result.ok and list(result.output.columns) == list(dirty_df.columns[:2])
+
+
+def test_the_audit_layer_blocks_routes_that_skip_the_patched_names(tmp_path):
+    import io
+    import os
+
+    raw_open = io.open  # the real function, not the builtins.open name that is patched
+    secret = tmp_path / "secret.txt"
+    secret.write_text("private", encoding="utf-8")
+    with _runner._locked_down():
+        with pytest.raises(PermissionError):
+            raw_open(secret, encoding="utf-8")
+        with pytest.raises(PermissionError):
+            raw_open(tmp_path / "new.txt", "w", encoding="utf-8")
+        with pytest.raises(PermissionError):
+            os.listdir(tmp_path)
+        with pytest.raises(PermissionError):
+            os.system("echo hi")
+        with pytest.raises(PermissionError):
+            subprocess.Popen([sys.executable, "-c", "pass"])
+    assert secret.read_text(encoding="utf-8") == "private"  # only blocked while a transform runs
+    assert not (tmp_path / "new.txt").exists()
+
+
+def test_the_audit_layer_still_lets_imports_work():
+    import importlib
+
+    with _runner._locked_down():
+        module = importlib.import_module("pandas.tseries.holiday")
+    assert module.__name__ == "pandas.tseries.holiday"
