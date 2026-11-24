@@ -390,3 +390,26 @@ def test_old_dropped_copies_are_cleared_when_the_app_starts(tmp_path, data_dir):
         pass
     assert not old.exists()
     assert (recent / "a.csv").exists()
+
+
+def test_transform_files_that_cant_be_saved_or_read_are_a_400(tmp_path, data_dir):
+    client = make_client(tmp_path)
+    opened = client.post("/api/files/sample").json()
+    applied = client.post(
+        "/api/apply", json={"file": opened["id"], "code": CLEAN.read_text(encoding="utf-8")}
+    ).json()
+    save = client.post(
+        f"/api/outputs/{applied['id']}/save",
+        json={"kind": "transform", "path": str(tmp_path / "missing" / "t.py")},
+    )
+    assert save.status_code == 400
+    missing = client.post(
+        "/api/apply", json={"file": opened["id"], "path": str(tmp_path / "nope.py")}
+    )
+    assert missing.status_code == 400
+    binary = tmp_path / "bin.py"
+    binary.write_bytes(b"\xff\xfe\x00\x80")
+    assert (
+        client.post("/api/apply", json={"file": opened["id"], "path": str(binary)}).status_code
+        == 400
+    )
