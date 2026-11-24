@@ -12,6 +12,7 @@ import os
 import socket
 import sys
 import traceback
+import zoneinfo
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
@@ -50,7 +51,7 @@ _DENIED_EVENTS = (
     "os.symlink",
 )
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
-_audit = {"on": False, "busy": False, "installed": False, "roots": ()}
+_audit = {"on": False, "busy": False, "installed": False, "roots": (), "zones": ()}
 
 
 def main(workdir: Path) -> int:
@@ -100,8 +101,19 @@ def _locked_down() -> Iterator[None]:
     def blocked(*args, **kwargs):
         raise PermissionError("file and network access are blocked in the sandbox")
 
+    def guarded_open(file, mode="r", *args, **kwargs):
+        # zoneinfo reads the system's time zone files with the builtin open
+        if (
+            isinstance(mode, str)
+            and not any(c in mode for c in "wax+")
+            and _under(file, _audit["zones"])
+        ):
+            return real_open(file, mode, *args, **kwargs)
+        return blocked()
+
+    _audit["zones"] = tuple(os.path.normcase(os.path.realpath(p)) for p in zoneinfo.TZPATH)
     builtins.__import__ = guarded_import
-    builtins.open = blocked
+    builtins.open = guarded_open
     for obj, name, _ in saved:
         setattr(obj, name, blocked)
     _audit["on"] = True
@@ -131,15 +143,19 @@ def _install_audit() -> None:
     _audit["installed"] = True
 
 
-def _readable(path: object) -> bool:
-    """Python's own files, which imports need while a transform runs."""
-    if isinstance(path, int):  # an already open descriptor
-        return True
+def _under(path: object, roots: tuple[str, ...]) -> bool:
     try:
         real = os.path.normcase(os.path.realpath(os.fsdecode(path)))
     except (TypeError, ValueError, OSError):
         return False
-    return any(real == root or real.startswith(root + os.sep) for root in _audit["roots"])
+    return any(real == root or real.startswith(root + os.sep) for root in roots)
+
+
+def _readable(path: object) -> bool:
+    """Python's own files and time zone data, which imports and dates need in a transform."""
+    if isinstance(path, int):  # an already open descriptor
+        return True
+    return _under(path, _audit["roots"] + _audit["zones"])
 
 
 def _listable(path: object) -> bool:
