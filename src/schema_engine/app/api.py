@@ -312,7 +312,10 @@ def create_app(
                 if dialogs is None:
                     raise HTTPException(400, "No transform given.")
                 return None
-            code = Path(path).read_text(encoding="utf-8")
+            try:
+                code = Path(path).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                raise HTTPException(400, f"Can't read {path}: {exc}") from exc
         result = run_transform(code, item.df, timeout=body.timeout)
         if result.output is None:
             raise HTTPException(422, result.error or "The transform failed.")
@@ -335,7 +338,10 @@ def create_app(
             return None
         path = Path(chosen)
         if body.kind == "transform":
-            path.write_text(out.script, encoding="utf-8")
+            try:
+                path.write_text(out.script, encoding="utf-8")
+            except OSError as exc:
+                raise HTTPException(400, str(exc)) from exc
             return {"path": str(path)}
         suffix = path.suffix.lower()
         if out.preset and suffix != out.preset.suffix:
