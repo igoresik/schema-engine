@@ -292,7 +292,9 @@ Generated code never runs inside the engine itself.
    `exec`, `query`, `getattr` and dunder attributes are rejected.
 2. **Run in a separate Python process** with a time limit (`--timeout`, default 30 s).
    That process gets no API keys. While the code runs, file and network access are
-   blocked and its imports are checked again.
+   blocked and its imports are checked again. Python's own audit events back this up:
+   opening files outside Python's own folders, writing files, starting programs and
+   opening sockets are refused whichever way the code reaches them.
 3. **Checked after it runs.** The code must return a table with unique, non-empty column
    names. Results come back as JSON.
 
@@ -300,8 +302,8 @@ Generated code never runs inside the engine itself.
 token, so Windows refuses its writes and deletes outside its own work folder. A Job Object
 stops it from starting other programs, caps its memory at 2 GB and ends it if the app
 closes. Even code that slips past the check can't change or delete your files or run
-`os.system`. It can still read files and open network connections, since only the
-check and a socket patch stand in the way of those. Set `SCHEMA_ENGINE_NO_JAIL=1` to
+`os.system`. The check, the socket patch and the audit hook are what stand in the way of
+reading files and opening network connections, so they are not as strong as the jail. Set `SCHEMA_ENGINE_NO_JAIL=1` to
 turn the jail off. Other systems have no jail.
 
 This catches careless or buggy code and limits the damage from bad code on Windows. It

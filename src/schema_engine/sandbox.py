@@ -5,12 +5,14 @@ Two layers stand between model output and your machine:
 1. A static check of the code before anything runs: allowlisted imports only, and
    no file, network, eval or dunder access.
 2. A separate Python process with a timeout and no API keys in its environment,
-   where file and network access are blocked while the transform runs.
+   where file and network access are blocked while the transform runs, both by patching
+   the usual names and by an audit hook that refuses file, process and socket operations
+   however the code reaches them.
 
 On Windows the child also runs in a jail (see ``_jail``): a Low-integrity token that can't
 write or delete your files, and a Job Object that blocks new processes and caps memory.
-Reading files and network connections are still possible there, and the other systems have
-no jail at all, so this is still not a container or VM.
+The audit hook is the only thing stopping reads and connections there, and the other
+systems have no jail at all, so this is still not a container or VM.
 """
 
 from __future__ import annotations
