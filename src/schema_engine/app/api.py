@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import shutil
 import threading
+import time
 import uuid
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -141,12 +144,34 @@ class DefaultIn(BaseModel):
     provider: str
 
 
+DROPPED_KEEP_DAYS = 7
+
+
+def clear_old_drops(root: Path, days: int = DROPPED_KEEP_DAYS) -> None:
+    """Delete dropped-file copies older than `days`; one that fails to delete is left for later."""
+    cutoff = time.time() - days * 86_400
+    for folder in root.glob("*") if root.is_dir() else []:
+        try:
+            if folder.is_dir() and folder.stat().st_mtime < cutoff:
+                shutil.rmtree(folder)
+        except OSError:
+            continue
+
+
 def create_app(
     dialogs: Dialogs | None = None,
     provider_factory: Callable[[Settings], LLMProvider] = create_provider,
     config_file: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="schema-engine", docs_url=None, redoc_url=None, openapi_url=None)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        clear_old_drops(DATA_DIR / "dropped")
+        yield
+
+    app = FastAPI(
+        title="schema-engine", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+    )
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"]
     )
