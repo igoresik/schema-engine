@@ -1,3 +1,4 @@
+import os
 import time
 from pathlib import Path
 
@@ -375,3 +376,17 @@ def test_serves_the_built_ui(tmp_path, monkeypatch):
 def test_the_preview_keeps_small_decimals():
     df = pd.DataFrame({"p": [0.000000000015, 0.3333333333333]})
     assert api.table(df)["rows"] == [[0.000000000015], [0.3333333333333]]
+
+
+def test_old_dropped_copies_are_cleared_when_the_app_starts(tmp_path, data_dir):
+    dropped = data_dir / "dropped"
+    old, recent = dropped / "old", dropped / "recent"
+    for folder in (old, recent):
+        folder.mkdir(parents=True)
+        (folder / "a.csv").write_text("a\n1\n", encoding="utf-8")
+    week_ago = time.time() - 8 * 86_400
+    os.utime(old, (week_ago, week_ago))
+    with TestClient(api.create_app(config_file=tmp_path / "config.json")):
+        pass
+    assert not old.exists()
+    assert (recent / "a.csv").exists()
